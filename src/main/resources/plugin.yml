@@ -1,0 +1,16 @@
+name: DeathsToDiscord
+version: 1.2.1
+main: com.pinnacle.deathstodiscord.DeathsToDiscordPlugin
+api-version: '1.21'
+author: Kevin
+
+commands:
+  d2d:
+    description: Manage DeathsToDiscord
+    usage: /d2d reload
+    permission: d2d.admin
+
+permissions:
+  d2d.admin:
+    description: Allows /d2d reload
+    default: op

@@ -1,0 +1,15 @@
+webhook-url: "PASTE_WEBHOOK_URL_HERE"
+
+# Your scoreboard objective name from /scoreboard objectives list
+objective-name: "deaths"
+
+# "ALL" = list everyone
+# "TOP" = list top N only
+mode: "ALL"
+top: 10
+
+# The plugin will create the first message and fill this automatically
+message-id: ""
+
+# Small delay to batch rapid deaths & avoid rate limits (still updates per death)
+update-delay-seconds: 2
