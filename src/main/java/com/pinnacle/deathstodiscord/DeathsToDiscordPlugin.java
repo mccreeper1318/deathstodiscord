@@ -61,7 +61,7 @@ public class DeathsToDiscordPlugin extends JavaPlugin implements Listener, TabEx
             }
         });
 
-        getLogger().info("DeathsToDiscord v1.3.0 enabled. Updates will post on every death.");
+        getLogger().info("DeathsToDiscord v1.4-beta 1 enabled. Updates will post on every death.");
     }
 
     @EventHandler
