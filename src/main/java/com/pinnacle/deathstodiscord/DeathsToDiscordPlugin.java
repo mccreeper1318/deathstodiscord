@@ -1,7 +1,8 @@
 package com.pinnacle.deathstodiscord;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.World;
 import org.bukkit.command.Command;
@@ -23,11 +24,23 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 public class DeathsToDiscordPlugin extends JavaPlugin implements Listener, TabExecutor {
+
+    private static final int DISCORD_MAX_CONTENT_LENGTH = 2000;
+    private static final int DEFAULT_DISCORD_CONTENT_LIMIT = 1900;
+    private static final int MIN_DISCORD_CONTENT_LIMIT = 500;
 
     private final AtomicBoolean updateScheduled = new AtomicBoolean(false);
     private HttpClient http;
@@ -47,21 +60,14 @@ public class DeathsToDiscordPlugin extends JavaPlugin implements Listener, TabEx
                 .build();
 
         String webhookUrl = getConfig().getString("webhook-url", "");
-        if (webhookUrl == null || webhookUrl.isBlank() || webhookUrl.contains("PASTE_WEBHOOK_URL_HERE")) {
+        if (!isWebhookConfigured(webhookUrl)) {
             getLogger().warning("Webhook URL is not set! Set it in config.yml (webhook-url). Plugin will not post.");
             return;
         }
 
-        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
-            try {
-                ensureDiscordMessageExists();
-                patchLeaderboardNow();
-            } catch (Exception e) {
-                getLogger().warning("Startup Discord setup failed: " + e.getMessage());
-            }
-        });
+        Bukkit.getScheduler().runTask(this, () -> updateDiscordLeaderboard(null, () -> { }));
 
-        getLogger().info("DeathsToDiscord v1.4-beta 1 enabled. Updates will post on every death.");
+        getLogger().info("DeathsToDiscord v1.4 enabled. Updates will post on every death.");
     }
 
     @EventHandler
@@ -70,16 +76,7 @@ public class DeathsToDiscordPlugin extends JavaPlugin implements Listener, TabEx
         long delayTicks = delaySeconds * 20L;
 
         if (updateScheduled.compareAndSet(false, true)) {
-            Bukkit.getScheduler().runTaskLaterAsynchronously(this, () -> {
-                try {
-                    ensureDiscordMessageExists();
-                    patchLeaderboardNow();
-                } catch (Exception e) {
-                    getLogger().warning("Failed to patch leaderboard: " + e.getMessage());
-                } finally {
-                    updateScheduled.set(false);
-                }
-            }, delayTicks);
+            Bukkit.getScheduler().runTaskLater(this, () -> updateDiscordLeaderboard(null, () -> updateScheduled.set(false)), delayTicks);
         }
     }
 
@@ -89,27 +86,17 @@ public class DeathsToDiscordPlugin extends JavaPlugin implements Listener, TabEx
 
         if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
             if (!sender.hasPermission("d2d.admin")) {
-                sender.sendMessage(ChatColor.RED + "You don't have permission to do that.");
+                sender.sendMessage(Component.text("You don't have permission to do that.", NamedTextColor.RED));
                 return true;
             }
 
             reloadConfig();
-            sender.sendMessage(ChatColor.GREEN + "DeathsToDiscord config reloaded. Updating Discord message...");
-
-            Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
-                try {
-                    ensureDiscordMessageExists();
-                    patchLeaderboardNow();
-                } catch (Exception e) {
-                    sender.sendMessage(ChatColor.RED + "Update failed: " + e.getMessage());
-                    getLogger().warning("Reload-triggered update failed: " + e.getMessage());
-                }
-            });
-
+            sender.sendMessage(Component.text("DeathsToDiscord config reloaded. Updating Discord message...", NamedTextColor.GREEN));
+            updateDiscordLeaderboard(sender, () -> { });
             return true;
         }
 
-        sender.sendMessage(ChatColor.YELLOW + "Usage: /d2d reload");
+        sender.sendMessage(Component.text("Usage: /d2d reload", NamedTextColor.YELLOW));
         return true;
     }
 
@@ -124,11 +111,40 @@ public class DeathsToDiscordPlugin extends JavaPlugin implements Listener, TabEx
         return Collections.emptyList();
     }
 
+    private void updateDiscordLeaderboard(CommandSender sender, Runnable onComplete) {
+        if (!Bukkit.isPrimaryThread()) {
+            Bukkit.getScheduler().runTask(this, () -> updateDiscordLeaderboard(sender, onComplete));
+            return;
+        }
+
+        String webhookUrl = getConfig().getString("webhook-url", "");
+        if (!isWebhookConfigured(webhookUrl)) {
+            completeWithFailure(sender, "Webhook URL is not set in config.yml.", onComplete);
+            return;
+        }
+
+        String objectiveName = getConfig().getString("objective-name", "deaths");
+        String content = buildLeaderboardMessage(objectiveName);
+        if (content == null) {
+            completeWithFailure(sender, "Objective '" + objectiveName + "' not found on main scoreboard.", onComplete);
+            return;
+        }
+
+        String messageId = getConfig().getString("message-id", "");
+        if (messageId == null || messageId.isBlank()) {
+            createDiscordMessageThenPatch(webhookUrl, content, sender, onComplete);
+            return;
+        }
+
+        patchDiscordMessageAsync(webhookUrl, messageId, content, sender, onComplete);
+    }
+
     private String buildLeaderboardMessage(String objectiveName) {
         FileConfiguration cfg = getConfig();
         String mode = cfg.getString("mode", "ALL").trim().toUpperCase(Locale.ROOT);
         int top = Math.max(1, cfg.getInt("top", 10));
         boolean showZeroDeaths = cfg.getBoolean("show-zero-deaths", true);
+        int maxContentChars = getMaxDiscordContentChars();
 
         Scoreboard main = Objects.requireNonNull(Bukkit.getScoreboardManager()).getMainScoreboard();
         Objective obj = main.getObjective(objectiveName);
@@ -190,64 +206,108 @@ public class DeathsToDiscordPlugin extends JavaPlugin implements Listener, TabEx
             sorted = sorted.stream().limit(top).toList();
         }
 
-        StringBuilder sb = new StringBuilder();
-        if ("TOP".equals(mode)) {
-            sb.append("**💀 Death Leaderboard (Top ").append(top).append(")**\n");
-        } else {
-            sb.append("**💀 Death Leaderboard (Everyone)**\n");
-        }
+        String header = "TOP".equals(mode)
+                ? "**💀 Death Leaderboard (Top " + top + ")**\n"
+                : "**💀 Death Leaderboard (Everyone)**\n";
+        String footer = "\n_Tracked players: " + scores.size() + "_\n_Updated: " + new Date() + "_";
 
+        List<String> entryLines = new ArrayList<>();
         int rank = 1;
-        for (Map.Entry<String, Integer> e : sorted) {
-            sb.append(rank).append(". ").append(e.getKey()).append(" — ").append(e.getValue()).append("\n");
+        for (Map.Entry<String, Integer> entry : sorted) {
+            entryLines.add(rank + ". " + entry.getKey() + " — " + entry.getValue() + "\n");
             rank++;
         }
 
-        sb.append("\n_Tracked players: ").append(scores.size()).append("_");
-        sb.append("\n_Updated: ").append(new Date()).append("_");
-        return sb.toString();
+        StringBuilder sb = new StringBuilder(header);
+        if (entryLines.isEmpty()) {
+            sb.append("_No tracked players found._\n");
+        } else {
+            appendLeaderboardLinesWithinLimit(sb, entryLines, footer, maxContentChars);
+        }
+
+        sb.append(footer);
+        return trimHardLimit(sb.toString(), maxContentChars);
     }
 
-    private void ensureDiscordMessageExists() throws Exception {
-        String webhookUrl = getConfig().getString("webhook-url", "");
-        String messageId = getConfig().getString("message-id", "");
+    private void appendLeaderboardLinesWithinLimit(StringBuilder sb, List<String> entryLines, String footer, int maxContentChars) {
+        for (int i = 0; i < entryLines.size(); i++) {
+            String line = entryLines.get(i);
+            int remainingAfterLine = entryLines.size() - i - 1;
+            String omittedLine = remainingAfterLine > 0 ? "...and " + remainingAfterLine + " more players.\n" : "";
 
-        if (messageId != null && !messageId.isBlank()) return;
+            if (sb.length() + line.length() + omittedLine.length() + footer.length() > maxContentChars) {
+                int omitted = entryLines.size() - i;
+                String trimLine = "...and " + omitted + " more players.\n";
+                if (sb.length() + trimLine.length() + footer.length() <= maxContentChars) {
+                    sb.append(trimLine);
+                }
+                return;
+            }
 
-        String content = "**💀 Death Leaderboard**\nInitializing…";
-        String createdJson = discordWebhookPostWait(webhookUrl, content);
-
-        String id = extractJsonStringField(createdJson, "id");
-        if (id == null || id.isBlank()) {
-            throw new RuntimeException("Could not read message id from Discord response.");
+            sb.append(line);
         }
-
-        getConfig().set("message-id", id);
-        saveConfig();
-
-        getLogger().info("Created Discord message. Saved message-id=" + id);
     }
 
-    private void patchLeaderboardNow() throws Exception {
-        String webhookUrl = getConfig().getString("webhook-url", "");
-        String messageId = getConfig().getString("message-id", "");
-        String objectiveName = getConfig().getString("objective-name", "deaths");
+    private int getMaxDiscordContentChars() {
+        int configuredLimit = getConfig().getInt("max-discord-content-characters", DEFAULT_DISCORD_CONTENT_LIMIT);
+        return Math.min(DISCORD_MAX_CONTENT_LENGTH, Math.max(MIN_DISCORD_CONTENT_LIMIT, configuredLimit));
+    }
 
-        if (messageId == null || messageId.isBlank()) {
-            throw new RuntimeException("message-id not set (should have been created automatically).");
-        }
+    private void createDiscordMessageThenPatch(String webhookUrl, String content, CommandSender sender, Runnable onComplete) {
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+            try {
+                String createdJson = discordWebhookPostWait(webhookUrl, "**💀 Death Leaderboard**\nInitializing…");
+                String createdMessageId = extractJsonStringField(createdJson, "id");
 
-        String content = buildLeaderboardMessage(objectiveName);
-        if (content == null) {
-            throw new RuntimeException("Objective '" + objectiveName + "' not found on main scoreboard.");
-        }
+                if (createdMessageId == null || createdMessageId.isBlank()) {
+                    throw new RuntimeException("Could not read message id from Discord response.");
+                }
 
-        discordWebhookPatchMessage(webhookUrl, messageId, content);
+                Bukkit.getScheduler().runTask(this, () -> {
+                    getConfig().set("message-id", createdMessageId);
+                    saveConfig();
+                    getLogger().info("Created Discord message. Saved message-id=" + createdMessageId);
+                    patchDiscordMessageAsync(webhookUrl, createdMessageId, content, sender, onComplete);
+                });
+            } catch (Exception e) {
+                completeWithFailure(sender, "Discord message creation failed: " + e.getMessage(), onComplete);
+            }
+        });
+    }
+
+    private void patchDiscordMessageAsync(String webhookUrl, String messageId, String content, CommandSender sender, Runnable onComplete) {
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+            try {
+                discordWebhookPatchMessage(webhookUrl, messageId, content);
+                completeSuccessfully(sender, onComplete);
+            } catch (Exception e) {
+                completeWithFailure(sender, "Discord leaderboard update failed: " + e.getMessage(), onComplete);
+            }
+        });
+    }
+
+    private void completeSuccessfully(CommandSender sender, Runnable onComplete) {
+        Bukkit.getScheduler().runTask(this, () -> {
+            if (sender != null) {
+                sender.sendMessage(Component.text("DeathsToDiscord Discord message updated.", NamedTextColor.GREEN));
+            }
+            onComplete.run();
+        });
+    }
+
+    private void completeWithFailure(CommandSender sender, String message, Runnable onComplete) {
+        Bukkit.getScheduler().runTask(this, () -> {
+            if (sender != null) {
+                sender.sendMessage(Component.text("Update failed: " + message, NamedTextColor.RED));
+            }
+            getLogger().warning(message);
+            onComplete.run();
+        });
     }
 
     private String discordWebhookPostWait(String webhookUrl, String content) throws Exception {
         String url = webhookUrl.contains("?") ? webhookUrl + "&wait=true" : webhookUrl + "?wait=true";
-        String json = "{\"content\":\"" + escapeJson(content) + "\"}";
+        String json = "{\"content\":\"" + escapeJson(trimHardLimit(content, DISCORD_MAX_CONTENT_LENGTH)) + "\"}";
 
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(url))
@@ -264,8 +324,8 @@ public class DeathsToDiscordPlugin extends JavaPlugin implements Listener, TabEx
     }
 
     private void discordWebhookPatchMessage(String webhookUrl, String messageId, String content) throws Exception {
-        String patchUrl = webhookUrl + "/messages/" + messageId;
-        String json = "{\"content\":\"" + escapeJson(content) + "\"}";
+        String patchUrl = removeQueryString(webhookUrl) + "/messages/" + messageId;
+        String json = "{\"content\":\"" + escapeJson(trimHardLimit(content, DISCORD_MAX_CONTENT_LENGTH)) + "\"}";
 
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(patchUrl))
@@ -278,6 +338,25 @@ public class DeathsToDiscordPlugin extends JavaPlugin implements Listener, TabEx
         if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
             throw new RuntimeException("Discord HTTP " + resp.statusCode() + " response: " + resp.body());
         }
+    }
+
+    private boolean isWebhookConfigured(String webhookUrl) {
+        return webhookUrl != null && !webhookUrl.isBlank() && !webhookUrl.contains("PASTE_WEBHOOK_URL_HERE");
+    }
+
+    private String removeQueryString(String webhookUrl) {
+        int queryIndex = webhookUrl.indexOf('?');
+        if (queryIndex == -1) return webhookUrl;
+        return webhookUrl.substring(0, queryIndex);
+    }
+
+    private String trimHardLimit(String content, int maxContentChars) {
+        int safeLimit = Math.min(DISCORD_MAX_CONTENT_LENGTH, Math.max(MIN_DISCORD_CONTENT_LIMIT, maxContentChars));
+        if (content.length() <= safeLimit) return content;
+
+        String suffix = "\n...trimmed to fit Discord's message limit.";
+        int limitWithSuffix = Math.max(0, safeLimit - suffix.length());
+        return content.substring(0, limitWithSuffix) + suffix;
     }
 
     private String escapeJson(String s) {

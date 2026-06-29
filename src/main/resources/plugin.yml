@@ -1,7 +1,7 @@
 name: DeathsToDiscord
-version: 1.4-beta 1
+version: 1.4
 main: com.pinnacle.deathstodiscord.DeathsToDiscordPlugin
-api-version: '26.1'
+api-version: '26.2'
 author: Kevin
 
 commands:

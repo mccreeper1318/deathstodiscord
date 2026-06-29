@@ -3,11 +3,11 @@ plugins {
 }
 
 group = 'com.pinnacle'
-version = '1.4-beta 1'
+version = '1.4'
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(25)
     }
 }
 
@@ -17,7 +17,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly "io.papermc.paper:paper-api:26.1.2.build.52-alpha"
+    compileOnly "io.papermc.paper:paper-api:26.2.build.+"
 }
 
 tasks.withType(JavaCompile).configureEach {

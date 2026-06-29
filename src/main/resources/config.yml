@@ -16,3 +16,7 @@ message-id: ""
 
 # Small delay to batch rapid deaths & avoid rate limits (still updates per death)
 update-delay-seconds: 2
+
+# Discord message content can be up to 2000 characters.
+# This limit leaves a small safety buffer and trims very large leaderboards instead of failing.
+max-discord-content-characters: 1900
