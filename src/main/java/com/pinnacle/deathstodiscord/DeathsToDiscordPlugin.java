@@ -40,6 +40,7 @@ public class DeathsToDiscordPlugin extends JavaPlugin implements Listener, TabEx
     private static final int MIN_DISCORD_CONTENT_LIMIT = 500;
 
     private final UpdateCycleState deathUpdateState = new UpdateCycleState();
+    private final MessageCreationGate messageCreationGate = new MessageCreationGate();
     private HttpClient http;
 
     @Override
@@ -144,6 +145,14 @@ public class DeathsToDiscordPlugin extends JavaPlugin implements Listener, TabEx
 
         String messageId = getConfig().getString("message-id", "");
         if (messageId == null || messageId.isBlank()) {
+            boolean shouldCreateMessage = messageCreationGate.beginOrQueue(
+                    () -> updateDiscordLeaderboard(sender, onComplete),
+                    failureMessage -> completeWithFailure(sender, failureMessage, onComplete));
+
+            if (!shouldCreateMessage) {
+                return;
+            }
+
             createDiscordMessageThenPatch(webhookUrl, content, sender, onComplete);
             return;
         }
@@ -228,10 +237,15 @@ public class DeathsToDiscordPlugin extends JavaPlugin implements Listener, TabEx
                     getConfig().set("message-id", createdMessageId);
                     saveConfig();
                     getLogger().info("Created Discord message. Saved message-id=" + createdMessageId);
+                    messageCreationGate.creationSucceeded();
                     patchDiscordMessageAsync(webhookUrl, createdMessageId, content, sender, onComplete);
                 });
             } catch (Exception e) {
-                completeWithFailure(sender, "Discord message creation failed: " + e.getMessage(), onComplete);
+                String failureMessage = "Discord message creation failed: " + e.getMessage();
+                Bukkit.getScheduler().runTask(this, () -> {
+                    messageCreationGate.creationFailed(failureMessage);
+                    completeWithFailure(sender, failureMessage, onComplete);
+                });
             }
         });
     }
