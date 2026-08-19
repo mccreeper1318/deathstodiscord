@@ -2,7 +2,23 @@
 
 All notable changes to DeathsToDiscord are documented here.
 
-## [1.4.1-beta.1] - Unreleased
+## [1.4.1-beta.2] - Unreleased
+
+### Added
+
+- Added regression tests for initial Discord message creation coordination, including overlapping update requests and failed creation attempts.
+
+### Changed
+
+- Changed overlapping startup, reload, and death-triggered updates to wait for an in-progress initial Discord message creation when `message-id` is blank.
+- Preserved the existing 1.4/1.4.1 configuration format and saved `message-id` behavior; no configuration migration is required.
+
+### Fixed
+
+- Fixed issue #9: multiple overlapping updates can no longer create multiple Discord leaderboard messages while `message-id` is blank.
+- Fixed queued updates after a failed initial message creation so their completion callbacks are released instead of remaining stuck.
+
+## [1.4.1-beta.1] - Released - 2026-08-19
 
 ### Added
 
