@@ -7,16 +7,21 @@ All notable changes to DeathsToDiscord are documented here.
 ### Added
 
 - Added regression tests for initial Discord message creation coordination, including overlapping update requests and failed creation attempts.
+- Added regression tests for serialized Discord PATCH ordering and for keeping fresh post-creation updates behind the creator PATCH.
 
 ### Changed
 
 - Changed overlapping startup, reload, and death-triggered updates to wait for an in-progress initial Discord message creation when `message-id` is blank.
+- Changed Discord leaderboard PATCH requests to run serially in submission order instead of concurrently.
+- Changed initial message creation so its captured leaderboard PATCH completes before queued updates are released to rebuild and submit fresher snapshots.
 - Preserved the existing 1.4/1.4.1 configuration format and saved `message-id` behavior; no configuration migration is required.
 
 ### Fixed
 
 - Fixed issue #9: multiple overlapping updates can no longer create multiple Discord leaderboard messages while `message-id` is blank.
 - Fixed queued updates after a failed initial message creation so their completion callbacks are released instead of remaining stuck.
+- Fixed issue #10: concurrent PATCH requests can no longer finish out of order and allow an older leaderboard snapshot to overwrite a newer one.
+- Fixed the initial-message race where queued fresh updates could be released before the creator's older PATCH, allowing the stale creator snapshot to become the final Discord message.
 
 ## [1.4.1-beta.1] - Released - 2026-08-19
 

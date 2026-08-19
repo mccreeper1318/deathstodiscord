@@ -41,6 +41,7 @@ public class DeathsToDiscordPlugin extends JavaPlugin implements Listener, TabEx
 
     private final UpdateCycleState deathUpdateState = new UpdateCycleState();
     private final MessageCreationGate messageCreationGate = new MessageCreationGate();
+    private final PatchRequestQueue patchRequestQueue = new PatchRequestQueue();
     private HttpClient http;
 
     @Override
@@ -237,8 +238,14 @@ public class DeathsToDiscordPlugin extends JavaPlugin implements Listener, TabEx
                     getConfig().set("message-id", createdMessageId);
                     saveConfig();
                     getLogger().info("Created Discord message. Saved message-id=" + createdMessageId);
-                    messageCreationGate.creationSucceeded();
-                    patchDiscordMessageAsync(webhookUrl, createdMessageId, content, sender, onComplete);
+
+                    // Keep the creation gate closed until this captured snapshot has
+                    // completed its PATCH attempt. Any updates that arrived while the
+                    // POST was in flight will then rebuild and queue behind it.
+                    patchDiscordMessageAsync(webhookUrl, createdMessageId, content, sender, () -> {
+                        messageCreationGate.creationSucceeded();
+                        onComplete.run();
+                    });
                 });
             } catch (Exception e) {
                 String failureMessage = "Discord message creation failed: " + e.getMessage();
@@ -251,14 +258,45 @@ public class DeathsToDiscordPlugin extends JavaPlugin implements Listener, TabEx
     }
 
     private void patchDiscordMessageAsync(String webhookUrl, String messageId, String content, CommandSender sender, Runnable onComplete) {
+        if (!Bukkit.isPrimaryThread()) {
+            Bukkit.getScheduler().runTask(this, () -> patchDiscordMessageAsync(webhookUrl, messageId, content, sender, onComplete));
+            return;
+        }
+
+        patchRequestQueue.submit(() -> executeDiscordPatchAsync(webhookUrl, messageId, content, sender, onComplete));
+    }
+
+    private void executeDiscordPatchAsync(String webhookUrl, String messageId, String content, CommandSender sender, Runnable onComplete) {
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+            String failureMessage = null;
             try {
                 discordWebhookPatchMessage(webhookUrl, messageId, content);
-                completeSuccessfully(sender, onComplete);
             } catch (Exception e) {
-                completeWithFailure(sender, "Discord leaderboard update failed: " + e.getMessage(), onComplete);
+                failureMessage = "Discord leaderboard update failed: " + e.getMessage();
             }
+
+            String finalFailureMessage = failureMessage;
+            Bukkit.getScheduler().runTask(this, () -> finishSerializedPatch(sender, finalFailureMessage, onComplete));
         });
+    }
+
+    private void finishSerializedPatch(CommandSender sender, String failureMessage, Runnable onComplete) {
+        try {
+            if (failureMessage == null) {
+                if (sender != null) {
+                    sender.sendMessage(Component.text("DeathsToDiscord Discord message updated.", NamedTextColor.GREEN));
+                }
+            } else {
+                if (sender != null) {
+                    sender.sendMessage(Component.text("Update failed: " + failureMessage, NamedTextColor.RED));
+                }
+                getLogger().warning(failureMessage);
+            }
+
+            onComplete.run();
+        } finally {
+            patchRequestQueue.completeCurrent();
+        }
     }
 
     private void completeSuccessfully(CommandSender sender, Runnable onComplete) {
