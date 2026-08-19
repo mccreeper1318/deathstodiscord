@@ -31,7 +31,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 public class DeathsToDiscordPlugin extends JavaPlugin implements Listener, TabExecutor {
@@ -40,7 +39,7 @@ public class DeathsToDiscordPlugin extends JavaPlugin implements Listener, TabEx
     private static final int DEFAULT_DISCORD_CONTENT_LIMIT = 1900;
     private static final int MIN_DISCORD_CONTENT_LIMIT = 500;
 
-    private final AtomicBoolean updateScheduled = new AtomicBoolean(false);
+    private final UpdateCycleState deathUpdateState = new UpdateCycleState();
     private HttpClient http;
 
     @Override
@@ -70,11 +69,26 @@ public class DeathsToDiscordPlugin extends JavaPlugin implements Listener, TabEx
 
     @EventHandler
     public void onPlayerDeath(PlayerDeathEvent event) {
-        int delaySeconds = Math.max(0, getConfig().getInt("update-delay-seconds", 2));
-        long delayTicks = delaySeconds * 20L;
+        if (deathUpdateState.requestUpdate()) {
+            scheduleDeathUpdate(getUpdateDelayTicks());
+        }
+    }
 
-        if (updateScheduled.compareAndSet(false, true)) {
-            Bukkit.getScheduler().runTaskLater(this, () -> updateDiscordLeaderboard(null, () -> updateScheduled.set(false)), delayTicks);
+    private long getUpdateDelayTicks() {
+        int delaySeconds = Math.max(0, getConfig().getInt("update-delay-seconds", 2));
+        return delaySeconds * 20L;
+    }
+
+    private void scheduleDeathUpdate(long delayTicks) {
+        Bukkit.getScheduler().runTaskLater(this, () -> {
+            deathUpdateState.markUpdateStarted();
+            updateDiscordLeaderboard(null, this::completeDeathUpdate);
+        }, delayTicks);
+    }
+
+    private void completeDeathUpdate() {
+        if (deathUpdateState.completeUpdateAndShouldScheduleAgain()) {
+            scheduleDeathUpdate(getUpdateDelayTicks());
         }
     }
 
