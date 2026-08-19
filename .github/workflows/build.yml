@@ -1,0 +1,122 @@
+name: Build DeathsToDiscord
+
+run-name: Build DeathsToDiscord from ${{ github.ref_name }}
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
+      - name: Determine project version
+        id: version
+        shell: bash
+        run: |
+          PROJECT_VERSION="$(python3 - <<'PY'
+          import pathlib
+          import re
+
+          content = pathlib.Path("build.gradle").read_text(encoding="utf-8")
+          match = re.search(r"(?m)^\s*version\s*=\s*['\"]([^'\"]+)['\"]\s*$", content)
+          if match is None:
+              raise SystemExit("Could not read the project version from build.gradle.")
+          print(match.group(1))
+          PY
+          )"
+
+          echo "version=$PROJECT_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Project version: $PROJECT_VERSION"
+
+      - name: Build and test plugin
+        run: ./gradlew --no-daemon clean build
+
+      - name: Verify and stage plugin
+        id: plugin
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          EXPECTED_NAME="DeathsToDiscord-${VERSION}.jar"
+          EXPECTED_JAR="build/libs/${EXPECTED_NAME}"
+
+          if [[ ! -f "$EXPECTED_JAR" ]]; then
+            echo "Expected plugin JAR was not created: $EXPECTED_JAR"
+            echo "Available files:"
+            find build/libs -maxdepth 1 -type f -print || true
+            exit 1
+          fi
+
+          for REQUIRED_FILE in plugin.yml config.yml; do
+            if ! jar tf "$EXPECTED_JAR" | grep -qx "$REQUIRED_FILE"; then
+              echo "The built JAR does not contain $REQUIRED_FILE."
+              exit 1
+            fi
+          done
+
+          PLUGIN_VERSION="$(python3 - "$EXPECTED_JAR" <<'PY'
+          import re
+          import sys
+          import zipfile
+
+          with zipfile.ZipFile(sys.argv[1]) as archive:
+              plugin_yml = archive.read("plugin.yml").decode("utf-8")
+
+          match = re.search(r"(?m)^\s*version:\s*['\"]?([^'\"\s]+)['\"]?\s*$", plugin_yml)
+          if match is None:
+              raise SystemExit("Could not read the version from plugin.yml inside the JAR.")
+          print(match.group(1))
+          PY
+          )"
+
+          if [[ "$PLUGIN_VERSION" != "$VERSION" ]]; then
+            echo "plugin.yml version does not match the Gradle project version."
+            echo "Gradle version:     $VERSION"
+            echo "plugin.yml version: $PLUGIN_VERSION"
+            exit 1
+          fi
+
+          RELEASE_DIR="build/release"
+          mkdir -p "$RELEASE_DIR"
+          cp "$EXPECTED_JAR" "$RELEASE_DIR/$EXPECTED_NAME"
+
+          (
+            cd "$RELEASE_DIR"
+            sha256sum "$EXPECTED_NAME" > "$EXPECTED_NAME.sha256"
+          )
+
+          echo "jar=$RELEASE_DIR/$EXPECTED_NAME" >> "$GITHUB_OUTPUT"
+          echo "checksum=$RELEASE_DIR/$EXPECTED_NAME.sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deathstodiscord-${{ steps.version.outputs.version }}-${{ github.sha }}
+          path: |
+            ${{ steps.plugin.outputs.jar }}
+            ${{ steps.plugin.outputs.checksum }}
+          if-no-files-found: error

@@ -1,5 +1,5 @@
 name: DeathsToDiscord
-version: 1.4
+version: '${version}'
 main: com.pinnacle.deathstodiscord.DeathsToDiscordPlugin
 api-version: '26.2'
 author: Kevin

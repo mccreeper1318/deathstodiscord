@@ -4,6 +4,7 @@ plugins {
 
 group = 'com.pinnacle'
 version = '1.4'
+description = 'Keeps a Minecraft death leaderboard synchronized to a Discord webhook message.'
 
 java {
     toolchain {
@@ -17,9 +18,28 @@ repositories {
 }
 
 dependencies {
-    compileOnly "io.papermc.paper:paper-api:26.2.build.+"
+    compileOnly "io.papermc.paper:paper-api:26.2.build.62-beta"
+    testImplementation "org.junit.jupiter:junit-jupiter:5.11.4"
 }
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+    options.release.set(25)
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+}
+
+tasks.processResources {
+    def props = [version: project.version]
+    inputs.properties(props)
+    filteringCharset = 'UTF-8'
+    filesMatching('plugin.yml') {
+        expand(props)
+    }
+}
+
+tasks.jar {
+    archiveBaseName = 'DeathsToDiscord'
 }

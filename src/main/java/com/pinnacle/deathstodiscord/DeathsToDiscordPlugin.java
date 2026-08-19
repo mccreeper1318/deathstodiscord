@@ -24,9 +24,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -67,7 +65,7 @@ public class DeathsToDiscordPlugin extends JavaPlugin implements Listener, TabEx
 
         Bukkit.getScheduler().runTask(this, () -> updateDiscordLeaderboard(null, () -> { }));
 
-        getLogger().info("DeathsToDiscord v1.4 enabled. Updates will post on every death.");
+        getLogger().info("DeathsToDiscord v" + getPluginMeta().getVersion() + " enabled. Updates will post on every death.");
     }
 
     @EventHandler
@@ -194,58 +192,7 @@ public class DeathsToDiscordPlugin extends JavaPlugin implements Listener, TabEx
             }
         }
 
-        List<Map.Entry<String, Integer>> sorted = scores.entrySet().stream()
-                .sorted((a, b) -> {
-                    int scoreCompare = Integer.compare(b.getValue(), a.getValue());
-                    if (scoreCompare != 0) return scoreCompare;
-                    return a.getKey().compareToIgnoreCase(b.getKey());
-                })
-                .collect(Collectors.toList());
-
-        if ("TOP".equals(mode)) {
-            sorted = sorted.stream().limit(top).toList();
-        }
-
-        String header = "TOP".equals(mode)
-                ? "**💀 Death Leaderboard (Top " + top + ")**\n"
-                : "**💀 Death Leaderboard (Everyone)**\n";
-        String footer = "\n_Tracked players: " + scores.size() + "_\n_Updated: " + new Date() + "_";
-
-        List<String> entryLines = new ArrayList<>();
-        int rank = 1;
-        for (Map.Entry<String, Integer> entry : sorted) {
-            entryLines.add(rank + ". " + entry.getKey() + " — " + entry.getValue() + "\n");
-            rank++;
-        }
-
-        StringBuilder sb = new StringBuilder(header);
-        if (entryLines.isEmpty()) {
-            sb.append("_No tracked players found._\n");
-        } else {
-            appendLeaderboardLinesWithinLimit(sb, entryLines, footer, maxContentChars);
-        }
-
-        sb.append(footer);
-        return trimHardLimit(sb.toString(), maxContentChars);
-    }
-
-    private void appendLeaderboardLinesWithinLimit(StringBuilder sb, List<String> entryLines, String footer, int maxContentChars) {
-        for (int i = 0; i < entryLines.size(); i++) {
-            String line = entryLines.get(i);
-            int remainingAfterLine = entryLines.size() - i - 1;
-            String omittedLine = remainingAfterLine > 0 ? "...and " + remainingAfterLine + " more players.\n" : "";
-
-            if (sb.length() + line.length() + omittedLine.length() + footer.length() > maxContentChars) {
-                int omitted = entryLines.size() - i;
-                String trimLine = "...and " + omitted + " more players.\n";
-                if (sb.length() + trimLine.length() + footer.length() <= maxContentChars) {
-                    sb.append(trimLine);
-                }
-                return;
-            }
-
-            sb.append(line);
-        }
+        return LeaderboardFormatter.build(scores, mode, top, maxContentChars);
     }
 
     private int getMaxDiscordContentChars() {
