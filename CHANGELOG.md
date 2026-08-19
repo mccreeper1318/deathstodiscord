@@ -8,12 +8,14 @@ All notable changes to DeathsToDiscord are documented here.
 
 - Added regression tests for initial Discord message creation coordination, including overlapping update requests and failed creation attempts.
 - Added regression tests for serialized Discord PATCH ordering and for keeping fresh post-creation updates behind the creator PATCH.
+- Added regression tests that verify Discord webhook secrets are removed from exception messages before they can be logged or shown to administrators.
 
 ### Changed
 
 - Changed overlapping startup, reload, and death-triggered updates to wait for an in-progress initial Discord message creation when `message-id` is blank.
 - Changed Discord leaderboard PATCH requests to run serially in submission order instead of concurrently.
 - Changed initial message creation so its captured leaderboard PATCH completes before queued updates are released to rebuild and submit fresher snapshots.
+- Changed Discord request error handling to sanitize exception details before reporting failures while preserving useful non-secret diagnostics.
 - Preserved the existing 1.4/1.4.1 configuration format and saved `message-id` behavior; no configuration migration is required.
 
 ### Fixed
@@ -22,6 +24,11 @@ All notable changes to DeathsToDiscord are documented here.
 - Fixed queued updates after a failed initial message creation so their completion callbacks are released instead of remaining stuck.
 - Fixed issue #10: concurrent PATCH requests can no longer finish out of order and allow an older leaderboard snapshot to overwrite a newer one.
 - Fixed the initial-message race where queued fresh updates could be released before the creator's older PATCH, allowing the stale creator snapshot to become the final Discord message.
+
+### Security
+
+- Fixed issue #13: malformed webhook URLs and related Discord request exceptions can no longer expose the configured webhook URL or token through server logs or administrator-facing failure messages.
+- Added defense-in-depth redaction for Discord webhook URLs found in exception text even when they do not exactly match the currently configured webhook value.
 
 ## [1.4.1-beta.1] - Released - 2026-08-19
 

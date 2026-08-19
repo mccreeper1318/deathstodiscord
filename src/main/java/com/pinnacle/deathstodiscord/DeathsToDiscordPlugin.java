@@ -248,7 +248,8 @@ public class DeathsToDiscordPlugin extends JavaPlugin implements Listener, TabEx
                     });
                 });
             } catch (Exception e) {
-                String failureMessage = "Discord message creation failed: " + e.getMessage();
+                String safeDetails = WebhookSecretRedactor.safeExceptionMessage(e, webhookUrl);
+                String failureMessage = "Discord message creation failed: " + safeDetails;
                 Bukkit.getScheduler().runTask(this, () -> {
                     messageCreationGate.creationFailed(failureMessage);
                     completeWithFailure(sender, failureMessage, onComplete);
@@ -272,7 +273,8 @@ public class DeathsToDiscordPlugin extends JavaPlugin implements Listener, TabEx
             try {
                 discordWebhookPatchMessage(webhookUrl, messageId, content);
             } catch (Exception e) {
-                failureMessage = "Discord leaderboard update failed: " + e.getMessage();
+                String safeDetails = WebhookSecretRedactor.safeExceptionMessage(e, webhookUrl);
+                failureMessage = "Discord leaderboard update failed: " + safeDetails;
             }
 
             String finalFailureMessage = failureMessage;
