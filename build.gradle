@@ -3,7 +3,7 @@ plugins {
 }
 
 group = 'com.pinnacle'
-version = '1.4'
+version = '1.4.1'
 description = 'Keeps a Minecraft death leaderboard synchronized to a Discord webhook message.'
 
 java {
