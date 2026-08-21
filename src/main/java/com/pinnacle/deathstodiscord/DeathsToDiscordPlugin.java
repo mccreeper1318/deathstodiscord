@@ -247,6 +247,9 @@ public class DeathsToDiscordPlugin extends JavaPlugin implements Listener, TabEx
                         onComplete.run();
                     });
                 });
+            } catch (DiscordRateLimitException rateLimit) {
+                scheduleRateLimitedRetry("Discord message creation", rateLimit,
+                        () -> createDiscordMessageThenPatch(webhookUrl, content, sender, onComplete));
             } catch (Exception e) {
                 String safeDetails = WebhookSecretRedactor.safeExceptionMessage(e, webhookUrl);
                 String failureMessage = "Discord message creation failed: " + safeDetails;
@@ -272,6 +275,10 @@ public class DeathsToDiscordPlugin extends JavaPlugin implements Listener, TabEx
             String failureMessage = null;
             try {
                 discordWebhookPatchMessage(webhookUrl, messageId, content);
+            } catch (DiscordRateLimitException rateLimit) {
+                scheduleRateLimitedRetry("Discord leaderboard update", rateLimit,
+                        () -> executeDiscordPatchAsync(webhookUrl, messageId, content, sender, onComplete));
+                return;
             } catch (Exception e) {
                 String safeDetails = WebhookSecretRedactor.safeExceptionMessage(e, webhookUrl);
                 failureMessage = "Discord leaderboard update failed: " + safeDetails;
@@ -279,6 +286,16 @@ public class DeathsToDiscordPlugin extends JavaPlugin implements Listener, TabEx
 
             String finalFailureMessage = failureMessage;
             Bukkit.getScheduler().runTask(this, () -> finishSerializedPatch(sender, finalFailureMessage, onComplete));
+        });
+    }
+
+    private void scheduleRateLimitedRetry(String requestDescription, DiscordRateLimitException rateLimit,
+                                          Runnable retry) {
+        Bukkit.getScheduler().runTask(this, () -> {
+            long retryDelayTicks = rateLimit.retryDelayTicks();
+            getLogger().warning(requestDescription + " was rate limited by Discord (HTTP 429); retrying in "
+                    + (retryDelayTicks / 20.0) + " seconds.");
+            Bukkit.getScheduler().runTaskLater(this, retry, retryDelayTicks);
         });
     }
 
@@ -332,6 +349,9 @@ public class DeathsToDiscordPlugin extends JavaPlugin implements Listener, TabEx
                 .build();
 
         HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        if (resp.statusCode() == 429) {
+            throw DiscordRateLimitException.fromResponse(resp);
+        }
         if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
             throw new RuntimeException("Discord HTTP " + resp.statusCode() + " response: " + resp.body());
         }
@@ -350,6 +370,9 @@ public class DeathsToDiscordPlugin extends JavaPlugin implements Listener, TabEx
                 .build();
 
         HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        if (resp.statusCode() == 429) {
+            throw DiscordRateLimitException.fromResponse(resp);
+        }
         if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
             throw new RuntimeException("Discord HTTP " + resp.statusCode() + " response: " + resp.body());
         }

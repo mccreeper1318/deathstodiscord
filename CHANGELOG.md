@@ -2,7 +2,22 @@
 
 All notable changes to DeathsToDiscord are documented here.
 
-## [1.4.1-beta.2] - Unreleased
+## [1.4.1-beta.3] - Unreleased
+
+### Added
+
+- Added regression tests for Discord rate-limit retry delays, including `Retry-After` headers, Discord `retry_after` response bodies, fractional delays, malformed values, and safe fallback behavior.
+
+### Changed
+
+- Changed rate-limited Discord webhook message creation and leaderboard updates to retry asynchronously after Discord's requested delay instead of treating HTTP 429 responses as permanent failures.
+- Preserved initial message creation coordination, serialized PATCH ordering, and pending death updates while a rate-limited request waits to retry.
+
+### Fixed
+
+- Fixed issue #11: Discord HTTP 429 responses no longer leave the leaderboard permanently stale when no later event triggers another update.
+
+## [1.4.1-beta.2] - Released
 
 ### Added
 
