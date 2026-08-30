@@ -2,7 +2,7 @@ package com.pinnacle.deathstodiscord;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.Date;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -18,7 +18,7 @@ class LeaderboardFormatterTest {
         scores.put("beta", 7);
         scores.put("Alpha", 7);
 
-        String message = LeaderboardFormatter.build(scores, "ALL", 10, 1900, new Date(0));
+        String message = LeaderboardFormatter.build(scores, "ALL", 10, 1900, Instant.EPOCH);
 
         int alpha = message.indexOf("1. Alpha — 7");
         int beta = message.indexOf("2. beta — 7");
@@ -36,7 +36,7 @@ class LeaderboardFormatterTest {
         scores.put("Two", 8);
         scores.put("Three", 6);
 
-        String message = LeaderboardFormatter.build(scores, "TOP", 2, 1900, new Date(0));
+        String message = LeaderboardFormatter.build(scores, "TOP", 2, 1900, Instant.EPOCH);
 
         assertTrue(message.contains("Death Leaderboard (Top 2)"));
         assertTrue(message.contains("1. One — 10"));
@@ -52,10 +52,26 @@ class LeaderboardFormatterTest {
             scores.put("Player" + String.format("%03d", i), 100 - i);
         }
 
-        String message = LeaderboardFormatter.build(scores, "ALL", 10, 500, new Date(0));
+        String message = LeaderboardFormatter.build(scores, "ALL", 10, 500, Instant.EPOCH);
 
         assertTrue(message.length() <= 500);
         assertTrue(message.contains("more players"));
         assertTrue(message.contains("Tracked players: 100"));
+    }
+
+    @Test
+    void usesDiscordTimestampsInsteadOfTheServerTimezone() {
+        String message = LeaderboardFormatter.build(Map.of("Player", 1), "ALL", 10, 1900, Instant.EPOCH);
+
+        assertTrue(message.contains("Updated: <t:0:F> (<t:0:R>)"));
+    }
+
+    @Test
+    void escapesMarkdownCharactersInPlayerNames() {
+        String message = LeaderboardFormatter.build(
+                Map.of("Player_Name", 4), "ALL", 10, 1900, Instant.EPOCH);
+
+        assertTrue(message.contains("Player\\_Name — 4"));
+        assertFalse(message.contains("Player_Name — 4"));
     }
 }
