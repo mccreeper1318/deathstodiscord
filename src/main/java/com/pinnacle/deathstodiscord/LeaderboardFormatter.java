@@ -1,10 +1,10 @@
 package com.pinnacle.deathstodiscord;
 
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.time.Instant;
 import java.util.stream.Collectors;
 
 final class LeaderboardFormatter {
@@ -13,10 +13,10 @@ final class LeaderboardFormatter {
     }
 
     static String build(Map<String, Integer> scores, String mode, int top, int maxContentChars) {
-        return build(scores, mode, top, maxContentChars, new Date());
+        return build(scores, mode, top, maxContentChars, Instant.now());
     }
 
-    static String build(Map<String, Integer> scores, String mode, int top, int maxContentChars, Date updatedAt) {
+    static String build(Map<String, Integer> scores, String mode, int top, int maxContentChars, Instant updatedAt) {
         String normalizedMode = mode == null ? "ALL" : mode.trim().toUpperCase(Locale.ROOT);
         int normalizedTop = Math.max(1, top);
 
@@ -35,12 +35,15 @@ final class LeaderboardFormatter {
         String header = "TOP".equals(normalizedMode)
                 ? "**💀 Death Leaderboard (Top " + normalizedTop + ")**\n"
                 : "**💀 Death Leaderboard (Everyone)**\n";
-        String footer = "\n_Tracked players: " + scores.size() + "_\n_Updated: " + updatedAt + "_";
+        long updatedEpochSeconds = updatedAt.getEpochSecond();
+        String footer = "\n_Tracked players: " + scores.size()
+                + "_\n_Updated: <t:" + updatedEpochSeconds + ":F> (<t:" + updatedEpochSeconds + ":R>)_";
 
         List<String> entryLines = new ArrayList<>();
         int rank = 1;
         for (Map.Entry<String, Integer> entry : sorted) {
-            entryLines.add(rank + ". " + entry.getKey() + " — " + entry.getValue() + "\n");
+            entryLines.add(rank + ". " + escapeDiscordMarkdown(entry.getKey())
+                    + " — " + entry.getValue() + "\n");
             rank++;
         }
 
@@ -80,5 +83,14 @@ final class LeaderboardFormatter {
         String suffix = "\n...trimmed to fit Discord's message limit.";
         int limitWithSuffix = Math.max(0, maxContentChars - suffix.length());
         return content.substring(0, limitWithSuffix) + suffix;
+    }
+
+    static String escapeDiscordMarkdown(String playerName) {
+        return playerName
+                .replace("\\", "\\\\")
+                .replace("_", "\\_")
+                .replace("*", "\\*")
+                .replace("~", "\\~")
+                .replace("`", "\\`");
     }
 }

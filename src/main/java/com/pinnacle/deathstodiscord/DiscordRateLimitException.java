@@ -4,8 +4,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.net.http.HttpResponse;
 import java.util.OptionalLong;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Describes a temporary Discord rate limit without exposing response details.
@@ -15,10 +13,6 @@ final class DiscordRateLimitException extends Exception {
     private static final long DEFAULT_RETRY_DELAY_TICKS = 20L;
     private static final long MAX_RETRY_DELAY_TICKS = Integer.MAX_VALUE;
     private static final BigDecimal TICKS_PER_SECOND = BigDecimal.valueOf(20L);
-    private static final Pattern RETRY_AFTER_FIELD = Pattern.compile(
-            "\"retry_after\"\\s*:\\s*\"?([+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[eE][+-]?\\d+)?)\"?"
-    );
-
     private final long retryDelayTicks;
 
     private DiscordRateLimitException(long retryDelayTicks) {
@@ -38,13 +32,11 @@ final class DiscordRateLimitException extends Exception {
             return headerDelay.getAsLong();
         }
 
-        if (responseBody != null) {
-            Matcher matcher = RETRY_AFTER_FIELD.matcher(responseBody);
-            if (matcher.find()) {
-                OptionalLong bodyDelay = parseRetryDelay(matcher.group(1));
-                if (bodyDelay.isPresent()) {
-                    return bodyDelay.getAsLong();
-                }
+        var bodyValue = DiscordJson.decimalField(responseBody, "retry_after");
+        if (bodyValue.isPresent()) {
+            OptionalLong bodyDelay = parseRetryDelay(bodyValue.get().toPlainString());
+            if (bodyDelay.isPresent()) {
+                return bodyDelay.getAsLong();
             }
         }
 

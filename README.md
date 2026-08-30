@@ -9,9 +9,10 @@ Instead of posting a new Discord message every time someone dies, the plugin cre
 - Updates the Discord leaderboard whenever a player dies
 - Uses a single Discord message instead of creating message spam
 - Supports `ALL` and `TOP` leaderboard modes
-- Includes offline players that have been tracked by the server
+- Includes offline players discovered from server player data without rescanning the directory on every update
 - Optional display of players with zero deaths
-- Automatically saves and reuses the Discord message ID
+- Automatically saves and reuses webhook-specific Discord message state
+- Automatically replaces the leaderboard if its Discord message is deleted
 - Batches rapid deaths with a configurable update delay
 - Protects against Discord's 2,000-character message limit
 - Reloadable configuration without restarting the server
@@ -85,9 +86,6 @@ top: 10
 # If true, players with 0 deaths are included in the leaderboard
 show-zero-deaths: true
 
-# The plugin will create the first message and fill this automatically
-message-id: ""
-
 # Small delay to batch rapid deaths & avoid rate limits
 update-delay-seconds: 2
 
@@ -137,7 +135,7 @@ Sets the number of players shown when `mode` is set to `TOP`.
 top: 10
 ```
 
-The minimum effective value is `1`.
+Values below `1` are rejected during startup or `/d2d reload` with a clear configuration error.
 
 ### `show-zero-deaths`
 
@@ -150,20 +148,6 @@ show-zero-deaths: true
 - `true` — include players with zero deaths
 - `false` — hide players with zero deaths
 
-### `message-id`
-
-Stores the ID of the Discord leaderboard message.
-
-```yaml
-message-id: ""
-```
-
-Leave this blank during the initial setup. DeathsToDiscord creates the first message automatically and saves its ID here.
-
-Normally, this value should not be edited manually. If the leaderboard message is deleted from Discord, clear the value, save the config, and run `/d2d reload` so the plugin can create a replacement message.
-
-You should also clear it if you move the plugin to a different webhook or Discord channel and the existing message can no longer be edited through that webhook.
-
 ### `update-delay-seconds`
 
 Adds a short delay before updating Discord after a death.
@@ -172,7 +156,7 @@ Adds a short delay before updating Discord after a death.
 update-delay-seconds: 2
 ```
 
-This helps combine rapid deaths into one update and reduces unnecessary webhook requests. A value of `0` disables the delay.
+This helps combine rapid deaths into one update and reduces unnecessary webhook requests. A value of `0` disables the delay. Negative or non-integer values are rejected with a clear configuration error.
 
 ### `max-discord-content-characters`
 
@@ -182,7 +166,7 @@ Sets the maximum size DeathsToDiscord will use for the leaderboard message.
 max-discord-content-characters: 1900
 ```
 
-Discord allows a maximum of 2,000 characters for normal message content. DeathsToDiscord defaults to `1900` to leave a safety buffer. Configured values are limited to a minimum of `500` and a maximum of `2000`.
+Discord allows a maximum of 2,000 characters for normal message content. DeathsToDiscord defaults to `1900` to leave a safety buffer. Values outside `500` through `2000` are rejected with a clear configuration error.
 
 If the leaderboard is too large, the plugin keeps as many ranked players as will fit and adds a line showing how many additional players were omitted.
 
@@ -204,7 +188,7 @@ The permission defaults to server operators.
 
 When DeathsToDiscord starts with a valid webhook configured, it immediately synchronizes the leaderboard.
 
-If `message-id` is blank, the plugin creates a new Discord message and automatically saves its ID to `config.yml`. Future updates edit that same message.
+If no message exists for the configured webhook, the plugin creates one and stores its ID with a non-secret webhook fingerprint in `plugins/DeathsToDiscord/state.yml`. Runtime state is kept out of the user configuration and is invalidated automatically when the webhook changes. An existing `message-id` from an older version is migrated automatically.
 
 Whenever a player dies, DeathsToDiscord waits for the configured `update-delay-seconds` value and then rebuilds the leaderboard from the configured scoreboard objective. Rapid deaths during the delay are combined into the same update.
 
@@ -238,23 +222,11 @@ Then make sure `objective-name` exactly matches the death objective on the serve
 
 ### The Discord leaderboard message was deleted
 
-Set:
-
-```yaml
-message-id: ""
-```
-
-Save the config and run:
-
-```text
-/d2d reload
-```
-
-DeathsToDiscord will create a new leaderboard message and save the new message ID automatically.
+No manual configuration change is required. The next update detects Discord's missing-message response, creates a replacement leaderboard message, and saves its state automatically. Run `/d2d reload` if you want to trigger that update immediately.
 
 ### The webhook or Discord channel was changed
 
-If the old `message-id` belongs to a message that the new webhook cannot edit, clear `message-id` and run `/d2d reload` to create a new message through the new webhook.
+Save the new `webhook-url` and run `/d2d reload`. DeathsToDiscord detects the webhook change, invalidates the old message state, and creates a new leaderboard through the new webhook.
 
 ### Some players are not displayed
 
