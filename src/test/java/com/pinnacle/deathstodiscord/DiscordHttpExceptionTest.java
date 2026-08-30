@@ -12,4 +12,13 @@ class DiscordHttpExceptionTest {
         assertTrue(new DiscordHttpException(404, "{\"message\":\"Unknown Message\"}").isMissingMessage());
         assertFalse(new DiscordHttpException(401, "{\"message\":\"Unauthorized\"}").isMissingMessage());
     }
+
+    @Test
+    void retriesRequestTimeoutsAndServerFailuresOnly() {
+        assertTrue(new DiscordHttpException(408, "").isRetryable());
+        assertTrue(new DiscordHttpException(500, "").isRetryable());
+        assertTrue(new DiscordHttpException(599, "").isRetryable());
+        assertFalse(new DiscordHttpException(400, "").isRetryable());
+        assertFalse(new DiscordHttpException(404, "").isRetryable());
+    }
 }
