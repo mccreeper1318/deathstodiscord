@@ -54,7 +54,7 @@ record PluginSettings(
         }
 
         Integer contentLimit = contentLimitValue == null
-                ? DEFAULT_DISCORD_CONTENT_LENGTH
+                ? Integer.valueOf(DEFAULT_DISCORD_CONTENT_LENGTH)
                 : integerValue(contentLimitValue);
         if (contentLimit == null || contentLimit < MIN_DISCORD_CONTENT_LENGTH
                 || contentLimit > MAX_DISCORD_CONTENT_LENGTH) {
