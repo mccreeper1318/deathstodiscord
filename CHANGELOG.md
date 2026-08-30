@@ -2,7 +2,7 @@
 
 All notable changes to DeathsToDiscord are documented here.
 
-## [1.4.1] - Unreleased
+## [1.4.1] - 8/30/26
 
 ### Fixed
 
