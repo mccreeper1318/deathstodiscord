@@ -68,4 +68,18 @@ class UpdateCycleStateTest {
         state.markUpdateStarted();
         assertFalse(state.completeUpdateAndShouldScheduleAgain());
     }
+
+    @Test
+    void discardedFollowUpReturnsStateToIdleWhenWebhookIsDisabled() {
+        UpdateCycleState state = new UpdateCycleState();
+
+        assertTrue(state.requestUpdate());
+        state.markUpdateStarted();
+        assertFalse(state.requestUpdate());
+        assertTrue(state.completeUpdateAndShouldScheduleAgain());
+
+        state.discardScheduledUpdate();
+
+        assertTrue(state.requestUpdate());
+    }
 }

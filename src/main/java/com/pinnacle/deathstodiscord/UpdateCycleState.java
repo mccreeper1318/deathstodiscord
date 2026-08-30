@@ -49,6 +49,14 @@ final class UpdateCycleState {
         return false;
     }
 
+    synchronized void discardScheduledUpdate() {
+        if (phase != Phase.SCHEDULED) {
+            throw new IllegalStateException("Cannot discard an update while state is " + phase);
+        }
+        pending = false;
+        phase = Phase.IDLE;
+    }
+
     private enum Phase {
         IDLE,
         SCHEDULED,

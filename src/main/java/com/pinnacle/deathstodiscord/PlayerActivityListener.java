@@ -17,12 +17,12 @@ final class PlayerActivityListener implements Listener {
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
-        players.remember(event.getPlayer().getName());
+        players.remember(event.getPlayer().getUniqueId(), event.getPlayer().getName());
     }
 
     @EventHandler
     public void onPlayerDeath(PlayerDeathEvent event) {
-        players.remember(event.getEntity().getName());
+        players.remember(event.getEntity().getUniqueId(), event.getEntity().getName());
         deathCallback.run();
     }
 }

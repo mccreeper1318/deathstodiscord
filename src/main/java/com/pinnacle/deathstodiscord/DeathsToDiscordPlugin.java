@@ -86,6 +86,8 @@ public class DeathsToDiscordPlugin extends org.bukkit.plugin.java.JavaPlugin {
             PluginSettings current = settings;
             if (current != null && current.webhookConfigured()) {
                 scheduleDeathUpdate(current.updateDelayTicks());
+            } else {
+                deathUpdateState.discardScheduledUpdate();
             }
         }
     }

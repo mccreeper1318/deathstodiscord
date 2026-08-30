@@ -10,9 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.Deque;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -21,24 +19,22 @@ final class KnownPlayerDirectory {
     private static final int PROFILE_LOOKUPS_PER_TICK = 50;
 
     private final DeathsToDiscordPlugin plugin;
-    private final Set<String> playerNames = new LinkedHashSet<>();
+    private final PlayerNameCache playerNames = new PlayerNameCache();
 
     KnownPlayerDirectory(DeathsToDiscordPlugin plugin) {
         this.plugin = plugin;
     }
 
-    void remember(String playerName) {
-        if (playerName != null && !playerName.isBlank()) {
-            playerNames.add(playerName);
-        }
+    void remember(UUID playerUuid, String playerName) {
+        playerNames.remember(playerUuid, playerName);
     }
 
     List<String> snapshot() {
-        return List.copyOf(playerNames);
+        return playerNames.snapshot();
     }
 
     void discoverHistoricalPlayers(Runnable onComplete) {
-        Bukkit.getOnlinePlayers().forEach(player -> remember(player.getName()));
+        Bukkit.getOnlinePlayers().forEach(player -> remember(player.getUniqueId(), player.getName()));
 
         List<World> worlds = Bukkit.getWorlds();
         if (worlds.isEmpty()) {
@@ -76,8 +72,9 @@ final class KnownPlayerDirectory {
             public void run() {
                 int processed = 0;
                 while (processed < PROFILE_LOOKUPS_PER_TICK && !remaining.isEmpty()) {
-                    OfflinePlayer player = Bukkit.getOfflinePlayer(remaining.removeFirst());
-                    remember(player.getName());
+                    UUID playerUuid = remaining.removeFirst();
+                    OfflinePlayer player = Bukkit.getOfflinePlayer(playerUuid);
+                    remember(playerUuid, player.getName());
                     processed++;
                 }
 
