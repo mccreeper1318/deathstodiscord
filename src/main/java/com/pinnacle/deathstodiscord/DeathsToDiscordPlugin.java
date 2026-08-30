@@ -152,7 +152,11 @@ public class DeathsToDiscordPlugin extends org.bukkit.plugin.java.JavaPlugin {
         }
 
         String legacyMessageId = getConfig().getString("message-id", "");
-        discordUpdates.migrateLegacyMessageId(fingerprint, legacyMessageId);
+        if (!discordUpdates.migrateLegacyMessageId(fingerprint, legacyMessageId)) {
+            getLogger().severe(
+                    "Could not migrate the legacy Discord message id to state.yml; config.yml was left unchanged.");
+            return;
+        }
         getConfig().set("message-id", null);
         saveConfig();
         if (legacyMessageId != null && !legacyMessageId.isBlank() && !fingerprint.isBlank()) {
@@ -174,10 +178,17 @@ public class DeathsToDiscordPlugin extends org.bukkit.plugin.java.JavaPlugin {
         }
 
         OrderedSnapshotDispatcher.Reservation reservation = snapshotDispatcher.reserve();
-        leaderboardSnapshots.build(capturedSettings, result -> {
+        try {
+            leaderboardSnapshots.build(capturedSettings, result -> {
+                snapshotDispatcher.complete(reservation, () -> dispatchCompletedSnapshot(
+                        capturedSettings, capturedGeneration, sender, onComplete, result));
+            });
+        } catch (RuntimeException error) {
+            LeaderboardSnapshotService.Result failure = LeaderboardSnapshotService.Result.failure(
+                    "Leaderboard snapshot collection failed.");
             snapshotDispatcher.complete(reservation, () -> dispatchCompletedSnapshot(
-                    capturedSettings, capturedGeneration, sender, onComplete, result));
-        });
+                    capturedSettings, capturedGeneration, sender, onComplete, failure));
+        }
     }
 
     private void dispatchCompletedSnapshot(PluginSettings capturedSettings, long capturedGeneration,

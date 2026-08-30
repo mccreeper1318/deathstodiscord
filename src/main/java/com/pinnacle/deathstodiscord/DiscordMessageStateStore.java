@@ -33,17 +33,22 @@ final class DiscordMessageStateStore {
         return fingerprint;
     }
 
-    void migrateLegacyMessageId(String fingerprint, String legacyMessageId) {
+    boolean migrateLegacyMessageId(String fingerprint, String legacyMessageId) {
         if (legacyMessageId == null || legacyMessageId.isBlank()) {
-            return;
+            return true;
         }
         if (!fingerprint.equals(state.getString(FINGERPRINT_KEY, ""))) {
-            return;
+            return false;
         }
         if (messageId(fingerprint).isBlank()) {
+            Object previousMessageId = state.get(MESSAGE_ID_KEY);
             state.set(MESSAGE_ID_KEY, legacyMessageId.trim());
-            save();
+            if (!save()) {
+                state.set(MESSAGE_ID_KEY, previousMessageId);
+                return false;
+            }
         }
+        return true;
     }
 
     String messageId(String fingerprint) {
@@ -58,9 +63,13 @@ final class DiscordMessageStateStore {
         if (!fingerprint.equals(state.getString(FINGERPRINT_KEY, ""))) {
             return false;
         }
+        Object previousMessageId = state.get(MESSAGE_ID_KEY);
         state.set(MESSAGE_ID_KEY, messageId);
-        save();
-        return true;
+        if (save()) {
+            return true;
+        }
+        state.set(MESSAGE_ID_KEY, previousMessageId);
+        return false;
     }
 
     boolean clearMessageId(String fingerprint, String expectedMessageId) {
@@ -68,16 +77,22 @@ final class DiscordMessageStateStore {
         if (!Objects.equals(current, expectedMessageId)) {
             return false;
         }
+        Object previousMessageId = state.get(MESSAGE_ID_KEY);
         state.set(MESSAGE_ID_KEY, null);
-        save();
-        return true;
+        if (save()) {
+            return true;
+        }
+        state.set(MESSAGE_ID_KEY, previousMessageId);
+        return false;
     }
 
-    private void save() {
+    private boolean save() {
         try {
             state.save(stateFile);
+            return true;
         } catch (IOException e) {
             logger.severe("Could not save Discord message state: " + e.getMessage());
+            return false;
         }
     }
 }

@@ -46,19 +46,28 @@ final class LeaderboardSnapshotService {
 
             @Override
             public void run() {
-                int end = Math.min(names.size(), index + SCORE_LOOKUPS_PER_TICK);
-                while (index < end) {
-                    String name = names.get(index++);
-                    Score score = objective.getScore(name);
-                    int deaths = score.isScoreSet() ? score.getScore() : 0;
-                    if (settings.showZeroDeaths() || deaths != 0) {
-                        scores.put(name, deaths);
+                try {
+                    int end = Math.min(names.size(), index + SCORE_LOOKUPS_PER_TICK);
+                    while (index < end) {
+                        String name = names.get(index++);
+                        Score score = objective.getScore(name);
+                        int deaths = score.isScoreSet() ? score.getScore() : 0;
+                        if (settings.showZeroDeaths() || deaths != 0) {
+                            scores.put(name, deaths);
+                        }
                     }
-                }
 
-                if (index >= names.size()) {
+                    if (index < names.size()) {
+                        return;
+                    }
+
                     cancel();
                     formatAsynchronously(settings, Map.copyOf(scores), callback);
+                } catch (RuntimeException error) {
+                    cancel();
+                    callback.accept(Result.failure(
+                            "Leaderboard score scan failed because objective '"
+                                    + settings.objectiveName() + "' became unavailable."));
                 }
             }
         }.runTaskTimer(plugin, 0L, 1L);
@@ -67,13 +76,20 @@ final class LeaderboardSnapshotService {
     private void formatAsynchronously(PluginSettings settings, Map<String, Integer> scores,
                                       Consumer<Result> callback) {
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-            String content = LeaderboardFormatter.build(
-                    scores,
-                    settings.mode(),
-                    settings.top(),
-                    settings.maxDiscordContentCharacters(),
-                    Instant.now());
-            Bukkit.getScheduler().runTask(plugin, () -> callback.accept(Result.success(content)));
+            Result result;
+            try {
+                String content = LeaderboardFormatter.build(
+                        scores,
+                        settings.mode(),
+                        settings.top(),
+                        settings.maxDiscordContentCharacters(),
+                        Instant.now());
+                result = Result.success(content);
+            } catch (RuntimeException error) {
+                result = Result.failure("Leaderboard formatting failed.");
+            }
+            Result completedResult = result;
+            Bukkit.getScheduler().runTask(plugin, () -> callback.accept(completedResult));
         });
     }
 

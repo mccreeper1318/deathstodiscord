@@ -31,6 +31,21 @@ class PluginSettingsTest {
         assertTrue(result.errors().stream().anyMatch(error -> error.contains("max-discord")));
     }
 
+    @Test
+    void rejectsWebhookUrlsContainingFragments() {
+        PluginSettings.LoadResult result = PluginSettings.validate(
+                "https://discord.com/api/webhooks/123/token#fragment",
+                "deaths",
+                "ALL",
+                10,
+                true,
+                2,
+                1900);
+
+        assertFalse(result.valid());
+        assertTrue(result.errors().stream().anyMatch(error -> error.contains("webhook-url")));
+    }
+
     private static PluginSettings.LoadResult validSettings(String mode, int top, int delay, int limit) {
         return PluginSettings.validate(
                 "https://discord.com/api/webhooks/123/token",

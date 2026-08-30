@@ -90,7 +90,8 @@ record PluginSettings(
         try {
             URI uri = URI.create(value);
             return ("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))
-                    && uri.getHost() != null;
+                    && uri.getHost() != null
+                    && uri.getFragment() == null;
         } catch (IllegalArgumentException ignored) {
             return false;
         }

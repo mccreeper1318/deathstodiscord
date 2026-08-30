@@ -39,10 +39,9 @@ final class DiscordUpdateService {
         return fingerprint;
     }
 
-    void migrateLegacyMessageId(String fingerprint, String legacyMessageId) {
-        if (!fingerprint.isBlank()) {
-            stateStore.migrateLegacyMessageId(fingerprint, legacyMessageId);
-        }
+    boolean migrateLegacyMessageId(String fingerprint, String legacyMessageId) {
+        return fingerprint.isBlank()
+                || stateStore.migrateLegacyMessageId(fingerprint, legacyMessageId);
     }
 
     void submit(String webhookUrl, String content, CommandSender sender, Runnable onComplete) {
@@ -94,11 +93,16 @@ final class DiscordUpdateService {
                 String createdMessageId = client.createMessage(session.webhookUrl, INITIAL_MESSAGE);
                 Bukkit.getScheduler().runTask(plugin, () -> {
                     if (!isCurrent(session)) {
-                        cleanUpCancelledCreation(session, createdMessageId, onComplete);
+                        cleanUpCreatedMessage(session, createdMessageId, null, null, onComplete);
                         return;
                     }
                     if (!stateStore.saveMessageId(session.fingerprint, createdMessageId)) {
-                        cleanUpCancelledCreation(session, createdMessageId, onComplete);
+                        cleanUpCreatedMessage(
+                                session,
+                                createdMessageId,
+                                sender,
+                                "Discord message creation failed because state.yml could not be saved.",
+                                onComplete);
                         return;
                     }
 
@@ -117,46 +121,61 @@ final class DiscordUpdateService {
         });
     }
 
-    private void cleanUpCancelledCreation(WebhookSession session, String messageId, Runnable onComplete) {
+    private void cleanUpCreatedMessage(WebhookSession session, String messageId, CommandSender sender,
+                                       String failureMessage, Runnable onComplete) {
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
                 client.deleteMessage(session.webhookUrl, messageId);
-                finishCancelledOnMainThread(session, onComplete);
+                finishCreatedMessageCleanupOnMainThread(session, sender, failureMessage, onComplete);
             } catch (DiscordRateLimitException rateLimit) {
-                scheduleCancelledCreationCleanupRetry(session, messageId, rateLimit, onComplete);
+                scheduleCreatedMessageCleanupRetry(
+                        session, messageId, sender, failureMessage, rateLimit, onComplete);
             } catch (DiscordHttpException error) {
                 if (!error.isMissingMessage()) {
-                    logCancelledCreationCleanupFailure(session, error);
+                    logCreatedMessageCleanupFailure(session, error);
                 }
-                finishCancelledOnMainThread(session, onComplete);
+                finishCreatedMessageCleanupOnMainThread(session, sender, failureMessage, onComplete);
             } catch (Exception error) {
-                logCancelledCreationCleanupFailure(session, error);
-                finishCancelledOnMainThread(session, onComplete);
+                logCreatedMessageCleanupFailure(session, error);
+                finishCreatedMessageCleanupOnMainThread(session, sender, failureMessage, onComplete);
             }
         });
     }
 
-    private void scheduleCancelledCreationCleanupRetry(WebhookSession session, String messageId,
-                                                        DiscordRateLimitException rateLimit,
-                                                        Runnable onComplete) {
+    private void scheduleCreatedMessageCleanupRetry(WebhookSession session, String messageId,
+                                                    CommandSender sender, String failureMessage,
+                                                    DiscordRateLimitException rateLimit,
+                                                    Runnable onComplete) {
         Bukkit.getScheduler().runTask(plugin, () -> {
             long delayTicks = rateLimit.retryDelayTicks();
             plugin.getLogger().warning(
-                    "Cleanup of a message created by a cancelled Discord session was rate limited; retrying in "
+                    "Cleanup of a newly created Discord message was rate limited; retrying in "
                             + (delayTicks / 20.0) + " seconds.");
             Bukkit.getScheduler().runTaskLater(plugin,
-                    () -> cleanUpCancelledCreation(session, messageId, onComplete), delayTicks);
+                    () -> cleanUpCreatedMessage(
+                            session, messageId, sender, failureMessage, onComplete), delayTicks);
         });
     }
 
-    private void logCancelledCreationCleanupFailure(WebhookSession session, Exception error) {
+    private void logCreatedMessageCleanupFailure(WebhookSession session, Exception error) {
         plugin.getLogger().warning(
-                "Could not delete a message created by a cancelled Discord session: "
+                "Could not delete a newly created Discord message after its state was rejected: "
                         + WebhookSecretRedactor.safeExceptionMessage(error, session.webhookUrl));
     }
 
-    private void finishCancelledOnMainThread(WebhookSession session, Runnable onComplete) {
-        Bukkit.getScheduler().runTask(plugin, () -> finishCancelled(session, onComplete));
+    private void finishCreatedMessageCleanupOnMainThread(WebhookSession session, CommandSender sender,
+                                                         String failureMessage, Runnable onComplete) {
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (failureMessage == null || !isCurrent(session)) {
+                finishCancelled(session, onComplete);
+                return;
+            }
+            if (sender != null) {
+                sender.sendMessage(Component.text("Update failed: " + failureMessage, NamedTextColor.RED));
+            }
+            plugin.getLogger().warning(failureMessage);
+            finish(session, onComplete);
+        });
     }
 
     private void patch(WebhookSession session, String messageId, String content, CommandSender sender,
