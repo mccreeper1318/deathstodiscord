@@ -82,4 +82,17 @@ class UpdateCycleStateTest {
 
         assertTrue(state.requestUpdate());
     }
+
+    @Test
+    void resetClearsStaleStateBeforePluginReEnable() {
+        UpdateCycleState state = new UpdateCycleState();
+
+        assertTrue(state.requestUpdate());
+        state.markUpdateStarted();
+        assertFalse(state.requestUpdate());
+
+        state.reset();
+
+        assertTrue(state.requestUpdate());
+    }
 }

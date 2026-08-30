@@ -11,16 +11,22 @@ import java.time.Duration;
 public class DeathsToDiscordPlugin extends org.bukkit.plugin.java.JavaPlugin {
 
     private final UpdateCycleState deathUpdateState = new UpdateCycleState();
+    private final OrderedSnapshotDispatcher snapshotDispatcher = new OrderedSnapshotDispatcher();
 
     private KnownPlayerDirectory playerDirectory;
     private LeaderboardSnapshotService leaderboardSnapshots;
     private DiscordUpdateService discordUpdates;
     private PluginSettings settings;
     private long configurationGeneration;
+    private long lifecycleGeneration;
     private boolean shuttingDown;
 
     @Override
     public void onEnable() {
+        lifecycleGeneration++;
+        shuttingDown = false;
+        deathUpdateState.reset();
+        snapshotDispatcher.reset();
         saveDefaultConfig();
 
         HttpClient http = HttpClient.newBuilder()
@@ -69,17 +75,18 @@ public class DeathsToDiscordPlugin extends org.bukkit.plugin.java.JavaPlugin {
     }
 
     private void scheduleDeathUpdate(long delayTicks) {
+        long scheduledLifecycle = lifecycleGeneration;
         Bukkit.getScheduler().runTaskLater(this, () -> {
-            if (shuttingDown) {
+            if (shuttingDown || scheduledLifecycle != lifecycleGeneration) {
                 return;
             }
             deathUpdateState.markUpdateStarted();
-            updateDiscordLeaderboard(null, this::completeDeathUpdate);
+            updateDiscordLeaderboard(null, () -> completeDeathUpdate(scheduledLifecycle));
         }, delayTicks);
     }
 
-    private void completeDeathUpdate() {
-        if (shuttingDown) {
+    private void completeDeathUpdate(long completedLifecycle) {
+        if (shuttingDown || completedLifecycle != lifecycleGeneration) {
             return;
         }
         if (deathUpdateState.completeUpdateAndShouldScheduleAgain()) {
@@ -166,17 +173,25 @@ public class DeathsToDiscordPlugin extends org.bukkit.plugin.java.JavaPlugin {
             return;
         }
 
+        OrderedSnapshotDispatcher.Reservation reservation = snapshotDispatcher.reserve();
         leaderboardSnapshots.build(capturedSettings, result -> {
-            if (capturedGeneration != configurationGeneration || settings != capturedSettings) {
-                onComplete.run();
-                return;
-            }
-            if (!result.successful()) {
-                completeWithFailure(sender, result.failure(), onComplete);
-                return;
-            }
-            discordUpdates.submit(capturedSettings.webhookUrl(), result.content(), sender, onComplete);
+            snapshotDispatcher.complete(reservation, () -> dispatchCompletedSnapshot(
+                    capturedSettings, capturedGeneration, sender, onComplete, result));
         });
+    }
+
+    private void dispatchCompletedSnapshot(PluginSettings capturedSettings, long capturedGeneration,
+                                           CommandSender sender, Runnable onComplete,
+                                           LeaderboardSnapshotService.Result result) {
+        if (capturedGeneration != configurationGeneration || settings != capturedSettings) {
+            onComplete.run();
+            return;
+        }
+        if (!result.successful()) {
+            completeWithFailure(sender, result.failure(), onComplete);
+            return;
+        }
+        discordUpdates.submit(capturedSettings.webhookUrl(), result.content(), sender, onComplete);
     }
 
     private void completeWithFailure(CommandSender sender, String message, Runnable onComplete) {

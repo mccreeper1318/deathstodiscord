@@ -42,6 +42,18 @@ final class DiscordWebhookClient {
                 .build());
     }
 
+    void deleteMessage(String webhookUrl, String messageId) throws Exception {
+        send(buildDeleteRequest(webhookUrl, messageId));
+    }
+
+    static HttpRequest buildDeleteRequest(String webhookUrl, String messageId) {
+        return HttpRequest.newBuilder()
+                .uri(URI.create(messageUrl(webhookUrl, messageId)))
+                .timeout(Duration.ofSeconds(10))
+                .DELETE()
+                .build();
+    }
+
     private HttpResponse<String> send(HttpRequest request) throws Exception {
         HttpResponse<String> response = http.send(
                 request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));

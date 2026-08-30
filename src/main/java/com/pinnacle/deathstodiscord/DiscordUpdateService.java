@@ -93,9 +93,12 @@ final class DiscordUpdateService {
             try {
                 String createdMessageId = client.createMessage(session.webhookUrl, INITIAL_MESSAGE);
                 Bukkit.getScheduler().runTask(plugin, () -> {
-                    if (!isCurrent(session)
-                            || !stateStore.saveMessageId(session.fingerprint, createdMessageId)) {
-                        finishCancelled(session, onComplete);
+                    if (!isCurrent(session)) {
+                        cleanUpCancelledCreation(session, createdMessageId, onComplete);
+                        return;
+                    }
+                    if (!stateStore.saveMessageId(session.fingerprint, createdMessageId)) {
+                        cleanUpCancelledCreation(session, createdMessageId, onComplete);
                         return;
                     }
 
@@ -112,6 +115,48 @@ final class DiscordUpdateService {
                         onComplete);
             }
         });
+    }
+
+    private void cleanUpCancelledCreation(WebhookSession session, String messageId, Runnable onComplete) {
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            try {
+                client.deleteMessage(session.webhookUrl, messageId);
+                finishCancelledOnMainThread(session, onComplete);
+            } catch (DiscordRateLimitException rateLimit) {
+                scheduleCancelledCreationCleanupRetry(session, messageId, rateLimit, onComplete);
+            } catch (DiscordHttpException error) {
+                if (!error.isMissingMessage()) {
+                    logCancelledCreationCleanupFailure(session, error);
+                }
+                finishCancelledOnMainThread(session, onComplete);
+            } catch (Exception error) {
+                logCancelledCreationCleanupFailure(session, error);
+                finishCancelledOnMainThread(session, onComplete);
+            }
+        });
+    }
+
+    private void scheduleCancelledCreationCleanupRetry(WebhookSession session, String messageId,
+                                                        DiscordRateLimitException rateLimit,
+                                                        Runnable onComplete) {
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            long delayTicks = rateLimit.retryDelayTicks();
+            plugin.getLogger().warning(
+                    "Cleanup of a message created by a cancelled Discord session was rate limited; retrying in "
+                            + (delayTicks / 20.0) + " seconds.");
+            Bukkit.getScheduler().runTaskLater(plugin,
+                    () -> cleanUpCancelledCreation(session, messageId, onComplete), delayTicks);
+        });
+    }
+
+    private void logCancelledCreationCleanupFailure(WebhookSession session, Exception error) {
+        plugin.getLogger().warning(
+                "Could not delete a message created by a cancelled Discord session: "
+                        + WebhookSecretRedactor.safeExceptionMessage(error, session.webhookUrl));
+    }
+
+    private void finishCancelledOnMainThread(WebhookSession session, Runnable onComplete) {
+        Bukkit.getScheduler().runTask(plugin, () -> finishCancelled(session, onComplete));
     }
 
     private void patch(WebhookSession session, String messageId, String content, CommandSender sender,

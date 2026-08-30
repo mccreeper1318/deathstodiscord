@@ -57,6 +57,11 @@ final class UpdateCycleState {
         phase = Phase.IDLE;
     }
 
+    synchronized void reset() {
+        pending = false;
+        phase = Phase.IDLE;
+    }
+
     private enum Phase {
         IDLE,
         SCHEDULED,
