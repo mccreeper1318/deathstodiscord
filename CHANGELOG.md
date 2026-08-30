@@ -2,50 +2,24 @@
 
 All notable changes to DeathsToDiscord are documented here.
 
-## [1.4.1-beta.2] - Unreleased
-
-### Added
-
-- Added regression tests for initial Discord message creation coordination, including overlapping update requests and failed creation attempts.
-- Added regression tests for serialized Discord PATCH ordering and for keeping fresh post-creation updates behind the creator PATCH.
-- Added regression tests that verify Discord webhook secrets are removed from exception messages before they can be logged or shown to administrators.
-
-### Changed
-
-- Changed overlapping startup, reload, and death-triggered updates to wait for an in-progress initial Discord message creation when `message-id` is blank.
-- Changed Discord leaderboard PATCH requests to run serially in submission order instead of concurrently.
-- Changed initial message creation so its captured leaderboard PATCH completes before queued updates are released to rebuild and submit fresher snapshots.
-- Changed Discord request error handling to sanitize exception details before reporting failures while preserving useful non-secret diagnostics.
-- Preserved the existing 1.4/1.4.1 configuration format and saved `message-id` behavior; no configuration migration is required.
+## [1.4.1] - Unreleased
 
 ### Fixed
 
-- Fixed issue #9: multiple overlapping updates can no longer create multiple Discord leaderboard messages while `message-id` is blank.
-- Fixed queued updates after a failed initial message creation so their completion callbacks are released instead of remaining stuck.
-- Fixed issue #10: concurrent PATCH requests can no longer finish out of order and allow an older leaderboard snapshot to overwrite a newer one.
-- Fixed the initial-message race where queued fresh updates could be released before the creator's older PATCH, allowing the stale creator snapshot to become the final Discord message.
+- Fixed issue #7: deaths that occur while a Discord update is in flight now trigger one fresh follow-up update instead of being missed.
+- Fixed issue #8: historical-player discovery is cached, filesystem work and leaderboard formatting run asynchronously, and Bukkit profile/score lookups are spread across bounded tick batches to prevent large player histories from stalling one server tick on every update.
+- Fixed issue #9: overlapping updates can no longer create multiple initial Discord leaderboard messages.
+- Fixed issue #10: Discord updates are serialized so an older leaderboard snapshot cannot finish after and overwrite a newer snapshot.
+- Fixed issue #11: Discord HTTP 429 responses honor the requested retry delay and retry without dropping the pending leaderboard update.
+- Fixed issue #12: a deleted Discord leaderboard message is detected and recreated automatically on the next update.
+- Fixed issue #15: Discord response payloads are parsed with a JSON parser instead of formatting-sensitive string searches.
+- Fixed issue #16: Discord message IDs now live in a dedicated state file, are bound to a non-secret webhook fingerprint, migrate from legacy configuration, and cannot cross webhook reload sessions.
+- Fixed issue #17: invalid mode, count, delay, boolean, URL, objective, and Discord content-limit settings now produce clear configuration errors instead of being silently normalized or ignored.
+- Fixed issue #18: `/d2d reload` tab completion is no longer shown to senders without `d2d.admin`.
+- Fixed issue #19: leaderboard updates now use Discord-native timestamps that render in each viewer's locale and timezone.
+- Fixed issue #20: player names are escaped before being placed in Discord Markdown.
+- Fixed issue #21: event handling, commands, configuration, player discovery, score collection, message formatting, Discord networking, JSON parsing, request coordination, and persisted state are now separated into focused components.
 
 ### Security
 
-- Fixed issue #13: malformed webhook URLs and related Discord request exceptions can no longer expose the configured webhook URL or token through server logs or administrator-facing failure messages.
-- Added defense-in-depth redaction for Discord webhook URLs found in exception text even when they do not exactly match the currently configured webhook value.
-
-## [1.4.1-beta.1] - Released - 2026-08-19
-
-### Added
-
-- Added automated GitHub Actions build and release workflows for Java 25/Gradle builds, tests, verified plugin artifacts, and SHA-256 checksums.
-- Added automated tests for leaderboard ordering, TOP mode behavior, Discord message-length trimming, and death-update scheduling.
-
-### Changed
-
-- Changed the Gradle project version to `1.4.1` as the base version for the `1.4.1` prerelease/stable series.
-- Changed `plugin.yml` version handling so the plugin version is sourced from Gradle during the build.
-- Pinned the Paper 26.2 API dependency to a specific build for reproducible builds.
-- Changed death-triggered update scheduling to track scheduled, in-flight, and pending update states while preserving the existing configurable debounce delay.
-
-### Fixed
-
-- Fixed issue #7: deaths that occur after a leaderboard snapshot starts, including while the Discord request is still in progress, now queue a fresh follow-up update instead of being silently missed.
-- Fixed rapid in-flight deaths so they coalesce into one follow-up update rather than producing unnecessary duplicate requests.
-- Fixed the Gradle 9.3 test runtime configuration by explicitly including the JUnit Platform launcher.
+- Fixed issue #13: malformed webhook URLs and Discord request failures can no longer expose webhook tokens in logs or administrator-facing errors.
