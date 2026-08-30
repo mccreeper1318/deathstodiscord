@@ -44,4 +44,13 @@ class DiscordMessageStateStoreTest {
         assertFalse(store.saveMessageId(fingerprint, "123456789"));
         assertEquals("", store.messageId(fingerprint));
     }
+
+    @Test
+    void legacyMessageIdCannotMigrateWithoutAConfiguredWebhookIdentity() {
+        DiscordMessageStateStore store = new DiscordMessageStateStore(
+                temporaryDirectory.toFile(), Logger.getLogger("state-store-test"));
+
+        assertFalse(store.migrateLegacyMessageId("", "123456789"));
+        assertEquals("", store.messageId(""));
+    }
 }

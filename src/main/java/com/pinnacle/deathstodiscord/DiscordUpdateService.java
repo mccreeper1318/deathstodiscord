@@ -40,8 +40,7 @@ final class DiscordUpdateService {
     }
 
     boolean migrateLegacyMessageId(String fingerprint, String legacyMessageId) {
-        return fingerprint.isBlank()
-                || stateStore.migrateLegacyMessageId(fingerprint, legacyMessageId);
+        return stateStore.migrateLegacyMessageId(fingerprint, legacyMessageId);
     }
 
     void submit(String webhookUrl, String content, CommandSender sender, Runnable onComplete) {
@@ -93,16 +92,17 @@ final class DiscordUpdateService {
                 String createdMessageId = client.createMessage(session.webhookUrl, INITIAL_MESSAGE);
                 Bukkit.getScheduler().runTask(plugin, () -> {
                     if (!isCurrent(session)) {
-                        cleanUpCreatedMessage(session, createdMessageId, null, null, onComplete);
+                        finishCancelled(session, onComplete);
+                        cleanUpCreatedMessage(session, createdMessageId);
                         return;
                     }
                     if (!stateStore.saveMessageId(session.fingerprint, createdMessageId)) {
-                        cleanUpCreatedMessage(
+                        finishFailure(
                                 session,
-                                createdMessageId,
                                 sender,
                                 "Discord message creation failed because state.yml could not be saved.",
                                 onComplete);
+                        cleanUpCreatedMessage(session, createdMessageId);
                         return;
                     }
 
@@ -121,39 +121,31 @@ final class DiscordUpdateService {
         });
     }
 
-    private void cleanUpCreatedMessage(WebhookSession session, String messageId, CommandSender sender,
-                                       String failureMessage, Runnable onComplete) {
+    private void cleanUpCreatedMessage(WebhookSession session, String messageId) {
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
                 client.deleteMessage(session.webhookUrl, messageId);
-                finishCreatedMessageCleanupOnMainThread(session, sender, failureMessage, onComplete);
             } catch (DiscordRateLimitException rateLimit) {
-                scheduleCreatedMessageCleanupRetry(
-                        session, messageId, sender, failureMessage, rateLimit, onComplete);
+                scheduleCreatedMessageCleanupRetry(session, messageId, rateLimit);
             } catch (DiscordHttpException error) {
                 if (!error.isMissingMessage()) {
                     logCreatedMessageCleanupFailure(session, error);
                 }
-                finishCreatedMessageCleanupOnMainThread(session, sender, failureMessage, onComplete);
             } catch (Exception error) {
                 logCreatedMessageCleanupFailure(session, error);
-                finishCreatedMessageCleanupOnMainThread(session, sender, failureMessage, onComplete);
             }
         });
     }
 
     private void scheduleCreatedMessageCleanupRetry(WebhookSession session, String messageId,
-                                                    CommandSender sender, String failureMessage,
-                                                    DiscordRateLimitException rateLimit,
-                                                    Runnable onComplete) {
+                                                    DiscordRateLimitException rateLimit) {
         Bukkit.getScheduler().runTask(plugin, () -> {
             long delayTicks = rateLimit.retryDelayTicks();
             plugin.getLogger().warning(
                     "Cleanup of a newly created Discord message was rate limited; retrying in "
                             + (delayTicks / 20.0) + " seconds.");
             Bukkit.getScheduler().runTaskLater(plugin,
-                    () -> cleanUpCreatedMessage(
-                            session, messageId, sender, failureMessage, onComplete), delayTicks);
+                    () -> cleanUpCreatedMessage(session, messageId), delayTicks);
         });
     }
 
@@ -161,21 +153,6 @@ final class DiscordUpdateService {
         plugin.getLogger().warning(
                 "Could not delete a newly created Discord message after its state was rejected: "
                         + WebhookSecretRedactor.safeExceptionMessage(error, session.webhookUrl));
-    }
-
-    private void finishCreatedMessageCleanupOnMainThread(WebhookSession session, CommandSender sender,
-                                                         String failureMessage, Runnable onComplete) {
-        Bukkit.getScheduler().runTask(plugin, () -> {
-            if (failureMessage == null || !isCurrent(session)) {
-                finishCancelled(session, onComplete);
-                return;
-            }
-            if (sender != null) {
-                sender.sendMessage(Component.text("Update failed: " + failureMessage, NamedTextColor.RED));
-            }
-            plugin.getLogger().warning(failureMessage);
-            finish(session, onComplete);
-        });
     }
 
     private void patch(WebhookSession session, String messageId, String content, CommandSender sender,
@@ -268,12 +245,17 @@ final class DiscordUpdateService {
                 finishCancelled(session, onComplete);
                 return;
             }
-            if (sender != null) {
-                sender.sendMessage(Component.text("Update failed: " + failureMessage, NamedTextColor.RED));
-            }
-            plugin.getLogger().warning(failureMessage);
-            finish(session, onComplete);
+            finishFailure(session, sender, failureMessage, onComplete);
         });
+    }
+
+    private void finishFailure(WebhookSession session, CommandSender sender,
+                               String failureMessage, Runnable onComplete) {
+        if (sender != null) {
+            sender.sendMessage(Component.text("Update failed: " + failureMessage, NamedTextColor.RED));
+        }
+        plugin.getLogger().warning(failureMessage);
+        finish(session, onComplete);
     }
 
     private void finishCancelled(WebhookSession session, Runnable onComplete) {

@@ -152,6 +152,11 @@ public class DeathsToDiscordPlugin extends org.bukkit.plugin.java.JavaPlugin {
         }
 
         String legacyMessageId = getConfig().getString("message-id", "");
+        if (legacyMessageId != null && !legacyMessageId.isBlank() && fingerprint.isBlank()) {
+            getLogger().info(
+                    "Legacy Discord message id will remain in config.yml until a webhook is configured.");
+            return;
+        }
         if (!discordUpdates.migrateLegacyMessageId(fingerprint, legacyMessageId)) {
             getLogger().severe(
                     "Could not migrate the legacy Discord message id to state.yml; config.yml was left unchanged.");

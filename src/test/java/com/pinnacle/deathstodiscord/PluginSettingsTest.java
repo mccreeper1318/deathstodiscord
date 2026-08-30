@@ -46,6 +46,35 @@ class PluginSettingsTest {
         assertTrue(result.errors().stream().anyMatch(error -> error.contains("webhook-url")));
     }
 
+    @Test
+    void usesThePriorContentLimitDefaultWhenLegacyConfigOmitsTheSetting() {
+        PluginSettings.LoadResult result = PluginSettings.validate(
+                "https://discord.com/api/webhooks/123/token",
+                "deaths",
+                "ALL",
+                10,
+                true,
+                2,
+                null);
+
+        assertTrue(result.valid());
+        assertEquals(1900, result.settings().maxDiscordContentCharacters());
+    }
+
+    @Test
+    void stillRejectsAnExplicitlyInvalidContentLimit() {
+        PluginSettings.LoadResult result = PluginSettings.validate(
+                "https://discord.com/api/webhooks/123/token",
+                "deaths",
+                "ALL",
+                10,
+                true,
+                2,
+                "not-a-number");
+
+        assertFalse(result.valid());
+    }
+
     private static PluginSettings.LoadResult validSettings(String mode, int top, int delay, int limit) {
         return PluginSettings.validate(
                 "https://discord.com/api/webhooks/123/token",

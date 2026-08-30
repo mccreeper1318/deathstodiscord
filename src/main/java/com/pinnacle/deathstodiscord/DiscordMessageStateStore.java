@@ -37,6 +37,9 @@ final class DiscordMessageStateStore {
         if (legacyMessageId == null || legacyMessageId.isBlank()) {
             return true;
         }
+        if (fingerprint == null || fingerprint.isBlank()) {
+            return false;
+        }
         if (!fingerprint.equals(state.getString(FINGERPRINT_KEY, ""))) {
             return false;
         }

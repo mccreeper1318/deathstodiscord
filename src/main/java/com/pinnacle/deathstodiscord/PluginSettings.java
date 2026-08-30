@@ -17,6 +17,7 @@ record PluginSettings(
 
     private static final int MIN_DISCORD_CONTENT_LENGTH = 500;
     private static final int MAX_DISCORD_CONTENT_LENGTH = 2000;
+    private static final int DEFAULT_DISCORD_CONTENT_LENGTH = 1900;
 
     static LoadResult validate(String webhookUrl, String objectiveName, Object modeValue, Object topValue,
                                Object showZeroDeathsValue, Object updateDelayValue, Object contentLimitValue) {
@@ -52,7 +53,9 @@ record PluginSettings(
             errors.add("update-delay-seconds must be a non-negative integer.");
         }
 
-        Integer contentLimit = integerValue(contentLimitValue);
+        Integer contentLimit = contentLimitValue == null
+                ? DEFAULT_DISCORD_CONTENT_LENGTH
+                : integerValue(contentLimitValue);
         if (contentLimit == null || contentLimit < MIN_DISCORD_CONTENT_LENGTH
                 || contentLimit > MAX_DISCORD_CONTENT_LENGTH) {
             errors.add("max-discord-content-characters must be an integer from 500 through 2000.");
