@@ -4,6 +4,9 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
+import org.bukkit.plugin.IllegalPluginAccessException;
+
+import java.io.IOException;
 
 final class DiscordUpdateService {
 
@@ -90,25 +93,37 @@ final class DiscordUpdateService {
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
                 String createdMessageId = client.createMessage(session.webhookUrl, INITIAL_MESSAGE);
-                Bukkit.getScheduler().runTask(plugin, () -> {
-                    if (!isCurrent(session)) {
-                        finishCancelled(session, onComplete);
-                        cleanUpCreatedMessage(session, createdMessageId);
-                        return;
+                CreatedMessageHandoff handoff = new CreatedMessageHandoff();
+                session.trackPendingCreation(handoff);
+                if (isCurrent(session)) {
+                    boolean accepted = scheduleOnMainThread(() -> {
+                        if (!handoff.claimForMainThread()) {
+                            return;
+                        }
+                        session.clearPendingCreation(handoff);
+                        handleCreatedMessageOnMainThread(
+                                session, createdMessageId, content, sender, onComplete);
+                    });
+                    if (!accepted) {
+                        handoff.cancel();
                     }
-                    if (!stateStore.saveMessageId(session.fingerprint, createdMessageId)) {
-                        finishFailure(
-                                session,
-                                sender,
-                                "Discord message creation failed because state.yml could not be saved.",
-                                onComplete);
-                        cleanUpCreatedMessage(session, createdMessageId);
-                        return;
-                    }
+                } else {
+                    handoff.cancel();
+                }
 
-                    plugin.getLogger().info("Created a Discord leaderboard message and saved its state.");
-                    patch(session, createdMessageId, content, sender, onComplete, false);
-                });
+                CreatedMessageHandoff.Outcome outcome;
+                try {
+                    outcome = handoff.awaitResolution();
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    handoff.cancel();
+                    outcome = handoff.outcome();
+                }
+                if (outcome == CreatedMessageHandoff.Outcome.CANCELLED) {
+                    session.clearPendingCreation(handoff);
+                    finishCancelledAfterStaleCreation(session, onComplete);
+                    cleanUpCreatedMessageNow(session, createdMessageId);
+                }
             } catch (DiscordRateLimitException rateLimit) {
                 scheduleRateLimitedRetry(session, "Discord message creation", rateLimit,
                         () -> createThenPatch(session, content, sender, onComplete), onComplete);
@@ -121,25 +136,55 @@ final class DiscordUpdateService {
         });
     }
 
+    private void handleCreatedMessageOnMainThread(WebhookSession session, String createdMessageId,
+                                                  String content, CommandSender sender,
+                                                  Runnable onComplete) {
+        if (!isCurrent(session)) {
+            finishCancelled(session, onComplete);
+            cleanUpCreatedMessage(session, createdMessageId);
+            return;
+        }
+        if (!stateStore.saveMessageId(session.fingerprint, createdMessageId)) {
+            finishFailure(
+                    session,
+                    sender,
+                    "Discord message creation failed because state.yml could not be saved.",
+                    onComplete);
+            cleanUpCreatedMessage(session, createdMessageId);
+            return;
+        }
+
+        plugin.getLogger().info("Created a Discord leaderboard message and saved its state.");
+        patch(session, createdMessageId, content, sender, onComplete, false);
+    }
+
     private void cleanUpCreatedMessage(WebhookSession session, String messageId) {
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-            try {
-                client.deleteMessage(session.webhookUrl, messageId);
-            } catch (DiscordRateLimitException rateLimit) {
-                scheduleCreatedMessageCleanupRetry(session, messageId, rateLimit);
-            } catch (DiscordHttpException error) {
-                if (!error.isMissingMessage()) {
-                    logCreatedMessageCleanupFailure(session, error);
-                }
-            } catch (Exception error) {
+        try {
+            Bukkit.getScheduler().runTaskAsynchronously(
+                    plugin, () -> cleanUpCreatedMessageNow(session, messageId));
+        } catch (IllegalPluginAccessException error) {
+            plugin.getLogger().warning(
+                    "Could not schedule cleanup of a newly created Discord message because the plugin is disabled.");
+        }
+    }
+
+    private void cleanUpCreatedMessageNow(WebhookSession session, String messageId) {
+        try {
+            client.deleteMessage(session.webhookUrl, messageId);
+        } catch (DiscordRateLimitException rateLimit) {
+            scheduleCreatedMessageCleanupRetry(session, messageId, rateLimit);
+        } catch (DiscordHttpException error) {
+            if (!error.isMissingMessage()) {
                 logCreatedMessageCleanupFailure(session, error);
             }
-        });
+        } catch (Exception error) {
+            logCreatedMessageCleanupFailure(session, error);
+        }
     }
 
     private void scheduleCreatedMessageCleanupRetry(WebhookSession session, String messageId,
                                                     DiscordRateLimitException rateLimit) {
-        Bukkit.getScheduler().runTask(plugin, () -> {
+        boolean accepted = scheduleOnMainThread(() -> {
             long delayTicks = rateLimit.retryDelayTicks();
             plugin.getLogger().warning(
                     "Cleanup of a newly created Discord message was rate limited; retrying in "
@@ -147,6 +192,10 @@ final class DiscordUpdateService {
             Bukkit.getScheduler().runTaskLater(plugin,
                     () -> cleanUpCreatedMessage(session, messageId), delayTicks);
         });
+        if (!accepted) {
+            plugin.getLogger().warning(
+                    "Could not retry cleanup of a newly created Discord message because the plugin is disabled.");
+        }
     }
 
     private void logCreatedMessageCleanupFailure(WebhookSession session, Exception error) {
@@ -157,6 +206,11 @@ final class DiscordUpdateService {
 
     private void patch(WebhookSession session, String messageId, String content, CommandSender sender,
                        Runnable onComplete, boolean recoverMissingMessage) {
+        patch(session, messageId, content, sender, onComplete, recoverMissingMessage, 0);
+    }
+
+    private void patch(WebhookSession session, String messageId, String content, CommandSender sender,
+                       Runnable onComplete, boolean recoverMissingMessage, int transientRetriesCompleted) {
         if (!isCurrent(session)) {
             finishCancelled(session, onComplete);
             return;
@@ -168,11 +222,12 @@ final class DiscordUpdateService {
                 finishSuccessOnMainThread(session, sender, onComplete);
             } catch (DiscordRateLimitException rateLimit) {
                 scheduleRateLimitedRetry(session, "Discord leaderboard update", rateLimit,
-                        () -> patch(session, messageId, content, sender, onComplete, recoverMissingMessage),
+                        () -> patch(session, messageId, content, sender, onComplete,
+                                recoverMissingMessage, transientRetriesCompleted),
                         onComplete);
             } catch (DiscordHttpException error) {
                 if (recoverMissingMessage && error.isMissingMessage()) {
-                    Bukkit.getScheduler().runTask(plugin, () -> {
+                    scheduleOnMainThread(() -> {
                         if (!isCurrent(session)) {
                             finishCancelled(session, onComplete);
                             return;
@@ -185,12 +240,30 @@ final class DiscordUpdateService {
                     return;
                 }
 
+                if (error.isRetryable() && scheduleTransientPatchRetry(
+                        session, messageId, content, sender, onComplete,
+                        recoverMissingMessage, transientRetriesCompleted, error)) {
+                    return;
+                }
+
                 if (error.isMissingMessage()) {
-                    Bukkit.getScheduler().runTask(plugin,
+                    scheduleOnMainThread(
                             () -> stateStore.clearMessageId(session.fingerprint, messageId));
                 }
                 finishFailureOnMainThread(session, sender,
-                        "Discord leaderboard update failed: "
+                        (error.isRetryable()
+                                ? "Discord leaderboard update failed after transient retries: "
+                                : "Discord leaderboard update failed: ")
+                                + WebhookSecretRedactor.safeExceptionMessage(error, session.webhookUrl),
+                        onComplete);
+            } catch (IOException error) {
+                if (scheduleTransientPatchRetry(
+                        session, messageId, content, sender, onComplete,
+                        recoverMissingMessage, transientRetriesCompleted, error)) {
+                    return;
+                }
+                finishFailureOnMainThread(session, sender,
+                        "Discord leaderboard update failed after transient retries: "
                                 + WebhookSecretRedactor.safeExceptionMessage(error, session.webhookUrl),
                         onComplete);
             } catch (Exception error) {
@@ -202,10 +275,43 @@ final class DiscordUpdateService {
         });
     }
 
+    private boolean scheduleTransientPatchRetry(WebhookSession session, String messageId, String content,
+                                                CommandSender sender, Runnable onComplete,
+                                                boolean recoverMissingMessage, int retriesCompleted,
+                                                Exception error) {
+        if (!DiscordTransientRetryPolicy.canRetry(retriesCompleted)) {
+            return false;
+        }
+
+        int retryNumber = DiscordTransientRetryPolicy.nextRetryNumber(retriesCompleted);
+        long delayTicks = DiscordTransientRetryPolicy.retryDelayTicks(retryNumber);
+        String safeFailure = WebhookSecretRedactor.safeExceptionMessage(error, session.webhookUrl);
+        scheduleOnMainThread(() -> {
+            if (!isCurrent(session)) {
+                finishCancelled(session, onComplete);
+                return;
+            }
+
+            plugin.getLogger().warning(
+                    "Discord leaderboard update failed transiently (" + safeFailure + "); retrying in "
+                            + (delayTicks / 20.0) + " seconds (" + retryNumber + "/"
+                            + DiscordTransientRetryPolicy.maximumRetries() + ").");
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                if (isCurrent(session)) {
+                    patch(session, messageId, content, sender, onComplete,
+                            recoverMissingMessage, retryNumber);
+                } else {
+                    finishCancelled(session, onComplete);
+                }
+            }, delayTicks);
+        });
+        return true;
+    }
+
     private void scheduleRateLimitedRetry(WebhookSession session, String description,
                                           DiscordRateLimitException rateLimit, Runnable retry,
                                           Runnable onComplete) {
-        Bukkit.getScheduler().runTask(plugin, () -> {
+        scheduleOnMainThread(() -> {
             if (!isCurrent(session)) {
                 finishCancelled(session, onComplete);
                 return;
@@ -225,7 +331,7 @@ final class DiscordUpdateService {
     }
 
     private void finishSuccessOnMainThread(WebhookSession session, CommandSender sender, Runnable onComplete) {
-        Bukkit.getScheduler().runTask(plugin, () -> {
+        scheduleOnMainThread(() -> {
             if (!isCurrent(session)) {
                 finishCancelled(session, onComplete);
                 return;
@@ -240,7 +346,7 @@ final class DiscordUpdateService {
 
     private void finishFailureOnMainThread(WebhookSession session, CommandSender sender,
                                            String failureMessage, Runnable onComplete) {
-        Bukkit.getScheduler().runTask(plugin, () -> {
+        scheduleOnMainThread(() -> {
             if (!isCurrent(session)) {
                 finishCancelled(session, onComplete);
                 return;
@@ -262,6 +368,10 @@ final class DiscordUpdateService {
         finish(session, onComplete);
     }
 
+    private void finishCancelledAfterStaleCreation(WebhookSession session, Runnable onComplete) {
+        scheduleOnMainThread(() -> finishCancelled(session, onComplete));
+    }
+
     private void finish(WebhookSession session, Runnable onComplete) {
         try {
             onComplete.run();
@@ -274,12 +384,23 @@ final class DiscordUpdateService {
         return session != null && session.active && activeSession == session;
     }
 
+    private boolean scheduleOnMainThread(Runnable task) {
+        try {
+            Bukkit.getScheduler().runTask(plugin, task);
+            return true;
+        } catch (IllegalPluginAccessException ignored) {
+            return false;
+        }
+    }
+
     private void deactivateCurrentSession() {
         if (activeSession == null) {
             return;
         }
-        activeSession.active = false;
-        activeSession.queue.deactivate();
+        WebhookSession session = activeSession;
+        session.active = false;
+        session.cancelPendingCreation();
+        session.queue.deactivate();
         activeSession = null;
     }
 
@@ -288,10 +409,30 @@ final class DiscordUpdateService {
         private final String fingerprint;
         private final DiscordRequestQueue queue = new DiscordRequestQueue();
         private volatile boolean active = true;
+        private CreatedMessageHandoff pendingCreation;
 
         private WebhookSession(String webhookUrl, String fingerprint) {
             this.webhookUrl = webhookUrl;
             this.fingerprint = fingerprint;
+        }
+
+        private synchronized void trackPendingCreation(CreatedMessageHandoff handoff) {
+            pendingCreation = handoff;
+            if (!active) {
+                handoff.cancel();
+            }
+        }
+
+        private synchronized void clearPendingCreation(CreatedMessageHandoff handoff) {
+            if (pendingCreation == handoff) {
+                pendingCreation = null;
+            }
+        }
+
+        private synchronized void cancelPendingCreation() {
+            if (pendingCreation != null) {
+                pendingCreation.cancel();
+            }
         }
     }
 }

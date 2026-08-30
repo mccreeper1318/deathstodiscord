@@ -19,6 +19,10 @@ All notable changes to DeathsToDiscord are documented here.
 - Fixed issue #19: leaderboard updates now use Discord-native timestamps that render in each viewer's locale and timezone.
 - Fixed issue #20: player names are escaped before being placed in Discord Markdown.
 - Fixed issue #21: event handling, commands, configuration, player discovery, score collection, message formatting, Discord networking, JSON parsing, request coordination, and persisted state are now separated into focused components.
+- Fixed issue #29: transient Discord PATCH failures caused by timeouts, connection errors, HTTP 408 responses, or HTTP 5xx responses now retry with bounded exponential backoff.
+- Fixed issue #30: messages whose creation completes while the plugin is being disabled are cleaned up without relying on a new plugin-scheduled task.
+- Fixed issue #31: malformed Discord retry delays are capped at five minutes so a single HTTP 429 response cannot stall updates for years.
+- Fixed issue #32: Discord message state is written with atomic replacement and a recovery backup to prevent interrupted writes from creating duplicate leaderboard messages.
 
 ### Security
 

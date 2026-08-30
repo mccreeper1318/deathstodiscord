@@ -11,7 +11,7 @@ import java.util.OptionalLong;
 final class DiscordRateLimitException extends Exception {
 
     private static final long DEFAULT_RETRY_DELAY_TICKS = 20L;
-    private static final long MAX_RETRY_DELAY_TICKS = Integer.MAX_VALUE;
+    private static final long MAX_RETRY_DELAY_TICKS = 5L * 60L * 20L;
     private static final BigDecimal TICKS_PER_SECOND = BigDecimal.valueOf(20L);
     private final long retryDelayTicks;
 

@@ -69,10 +69,10 @@ class DiscordRateLimitExceptionTest {
     }
 
     @Test
-    void boundsExtremelyLargeRetryAfterValues() {
+    void capsExtremelyLargeRetryAfterValuesAtFiveMinutes() {
         long delayTicks = DiscordRateLimitException.retryDelayTicks(
                 "999999999999999999999999999999", null, null);
 
-        assertEquals(Integer.MAX_VALUE, delayTicks);
+        assertEquals(6000L, delayTicks);
     }
 }

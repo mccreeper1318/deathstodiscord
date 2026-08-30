@@ -17,6 +17,10 @@ final class DiscordHttpException extends Exception {
         return statusCode == 404;
     }
 
+    boolean isRetryable() {
+        return statusCode == 408 || statusCode >= 500 && statusCode <= 599;
+    }
+
     private static String buildMessage(int statusCode, String responseBody) {
         String discordMessage = DiscordJson.stringField(responseBody, "message").orElse("");
         if (discordMessage.isBlank()) {
