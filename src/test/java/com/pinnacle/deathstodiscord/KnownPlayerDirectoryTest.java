@@ -22,4 +22,17 @@ class KnownPlayerDirectoryTest {
 
         assertEquals(List.of(first, second), result);
     }
+
+    @Test
+    void mergesBukkitKnownPlayersWithFirstWorldPlayerData() {
+        UUID bukkitOnly = UUID.fromString("123e4567-e89b-12d3-a456-426614174000");
+        UUID shared = UUID.fromString("123e4567-e89b-12d3-a456-426614174001");
+        UUID playerDataOnly = UUID.fromString("123e4567-e89b-12d3-a456-426614174002");
+
+        List<UUID> result = KnownPlayerDirectory.mergeHistoricalPlayerUuids(
+                List.of(bukkitOnly, shared),
+                List.of(shared, playerDataOnly));
+
+        assertEquals(List.of(bukkitOnly, shared, playerDataOnly), result);
+    }
 }

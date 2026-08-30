@@ -9,7 +9,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
+import java.util.Arrays;
 import java.util.Deque;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -35,10 +37,13 @@ final class KnownPlayerDirectory {
 
     void discoverHistoricalPlayers(Runnable onComplete) {
         Bukkit.getOnlinePlayers().forEach(player -> remember(player.getUniqueId(), player.getName()));
+        List<UUID> bukkitKnownUuids = Arrays.stream(Bukkit.getOfflinePlayers())
+                .map(OfflinePlayer::getUniqueId)
+                .toList();
 
         List<World> worlds = Bukkit.getWorlds();
         if (worlds.isEmpty()) {
-            onComplete.run();
+            resolveNamesOverMultipleTicks(bukkitKnownUuids, onComplete);
             return;
         }
 
@@ -55,9 +60,16 @@ final class KnownPlayerDirectory {
                 playerUuids = List.of();
             }
 
-            List<UUID> discoveredUuids = playerUuids;
+            List<UUID> discoveredUuids = mergeHistoricalPlayerUuids(bukkitKnownUuids, playerUuids);
             Bukkit.getScheduler().runTask(plugin, () -> resolveNamesOverMultipleTicks(discoveredUuids, onComplete));
         });
+    }
+
+    static List<UUID> mergeHistoricalPlayerUuids(List<UUID> bukkitKnownUuids,
+                                                  List<UUID> playerDataUuids) {
+        LinkedHashSet<UUID> mergedUuids = new LinkedHashSet<>(bukkitKnownUuids);
+        mergedUuids.addAll(playerDataUuids);
+        return List.copyOf(mergedUuids);
     }
 
     private void resolveNamesOverMultipleTicks(List<UUID> uuids, Runnable onComplete) {

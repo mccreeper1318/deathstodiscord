@@ -23,6 +23,7 @@ All notable changes to DeathsToDiscord are documented here.
 - Fixed issue #30: messages whose creation completes while the plugin is being disabled are cleaned up without relying on a new plugin-scheduled task.
 - Fixed issue #31: malformed Discord retry delays are capped at five minutes so a single HTTP 429 response cannot stall updates for years.
 - Fixed issue #32: Discord message state is written with atomic replacement and a recovery backup to prevent interrupted writes from creating duplicate leaderboard messages.
+- Historical-player discovery now merges Bukkit's complete offline-player registry with first-world player-data files so existing scores remain visible when a player's `.dat` file is stored elsewhere.
 
 ### Security
 
