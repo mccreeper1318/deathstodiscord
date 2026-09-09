@@ -1,0 +1,46 @@
+package com.pinnacle.deathstodiscord;
+
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class ConfigKeyPresenceTest {
+
+    private static final String KEY = "max-discord-content-characters";
+
+    @Test
+    void detectsExplicitNullTopLevelKey() {
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(
+                "webhook-url: \"example\"\nmax-discord-content-characters:\n", KEY));
+    }
+
+    @Test
+    void detectsTopLevelKeyWithValue() {
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(
+                "max-discord-content-characters: 1900\n", KEY));
+    }
+
+    @Test
+    void treatsOmittedLegacyKeyAsAbsent() {
+        assertFalse(ConfigKeyPresence.containsTopLevelKey(
+                "webhook-url: \"example\"\nobjective-name: deaths\n", KEY));
+    }
+
+    @Test
+    void ignoresCommentedOrNestedKeys() {
+        String yaml = "# max-discord-content-characters:\n"
+                + "nested:\n"
+                + "  max-discord-content-characters:\n";
+
+        assertFalse(ConfigKeyPresence.containsTopLevelKey(yaml, KEY));
+    }
+
+    @Test
+    void detectsQuotedTopLevelKeysAndUtf8Bom() {
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(
+                "\uFEFF\"max-discord-content-characters\": null\n", KEY));
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(
+                "'max-discord-content-characters': null\n", KEY));
+    }
+}
