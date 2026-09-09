@@ -19,6 +19,20 @@ class PluginSettingsTest {
     }
 
     @Test
+    void acceptsDiscordWebhookUrlsWithSupportedHostsAndQueries() {
+        PluginSettings.LoadResult result = PluginSettings.validate(
+                "https://canary.discord.com/api/v10/webhooks/123/token?thread_id=456&wait=false",
+                "deaths",
+                "ALL",
+                10,
+                true,
+                2,
+                1900);
+
+        assertTrue(result.valid());
+    }
+
+    @Test
     void reportsEveryInvalidSetting() {
         PluginSettings.LoadResult result = PluginSettings.validate(
                 "not a url", "", "SIDEWAYS", -4, "yes", -1, 2500);
@@ -35,6 +49,51 @@ class PluginSettingsTest {
     void rejectsWebhookUrlsContainingFragments() {
         PluginSettings.LoadResult result = PluginSettings.validate(
                 "https://discord.com/api/webhooks/123/token#fragment",
+                "deaths",
+                "ALL",
+                10,
+                true,
+                2,
+                1900);
+
+        assertFalse(result.valid());
+        assertTrue(result.errors().stream().anyMatch(error -> error.contains("webhook-url")));
+    }
+
+    @Test
+    void rejectsNonDiscordHostsEvenWhenThePathLooksLikeAWebhook() {
+        PluginSettings.LoadResult result = PluginSettings.validate(
+                "https://example.com/api/webhooks/123/token",
+                "deaths",
+                "ALL",
+                10,
+                true,
+                2,
+                1900);
+
+        assertFalse(result.valid());
+        assertTrue(result.errors().stream().anyMatch(error -> error.contains("webhook-url")));
+    }
+
+    @Test
+    void rejectsDiscordUrlsThatAreNotWebhookEndpoints() {
+        PluginSettings.LoadResult result = PluginSettings.validate(
+                "https://discord.com/channels/123/456",
+                "deaths",
+                "ALL",
+                10,
+                true,
+                2,
+                1900);
+
+        assertFalse(result.valid());
+        assertTrue(result.errors().stream().anyMatch(error -> error.contains("webhook-url")));
+    }
+
+    @Test
+    void rejectsInsecureDiscordWebhookUrls() {
+        PluginSettings.LoadResult result = PluginSettings.validate(
+                "http://discord.com/api/webhooks/123/token",
                 "deaths",
                 "ALL",
                 10,
