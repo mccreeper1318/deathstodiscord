@@ -13,6 +13,7 @@ All notable changes to DeathsToDiscord are documented here.
 
 - Fixed issue #33: webhook validation now accepts only HTTPS Discord webhook endpoints, rejects ordinary Discord/channel and non-Discord URLs, and message creation replaces an existing `wait` query parameter instead of appending a duplicate.
 - Fixed issue #34: an explicitly present `max-discord-content-characters` setting with a YAML null value is now rejected instead of being mistaken for an omitted legacy setting and silently defaulted to `1900`.
+- Fixed issue #35: unchecked filesystem, scheduler, world, and Paper profile lookup failures during historical-player discovery are now handled as best-effort failures so startup discovery still completes and the initial Discord synchronization can proceed.
 
 ### Dependencies
 - Update `actions/setup-java` to `5`
