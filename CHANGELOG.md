@@ -2,7 +2,14 @@
 
 All notable changes to DeathsToDiscord are documented here.
 
-## [1.4.1] - 8/30/26
+## [1.4.2]
+
+### Changed
+
+- Added Dependabot configuration to check Gradle dependencies, the Gradle wrapper, and GitHub Actions weekly on the `dev` branch.
+- Paper API updates are excluded from Dependabot so Paper compatibility changes remain manually controlled.
+
+## [1.4.1]
 
 ### Fixed
 
