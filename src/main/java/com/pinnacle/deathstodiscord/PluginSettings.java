@@ -23,7 +23,8 @@ record PluginSettings(
             "^/api(?:/v\\d+)?/webhooks/[0-9]+/[^/]+/?$");
 
     static LoadResult validate(String webhookUrl, String objectiveName, Object modeValue, Object topValue,
-                               Object showZeroDeathsValue, Object updateDelayValue, Object contentLimitValue) {
+                               Object showZeroDeathsValue, Object updateDelayValue, Object contentLimitValue,
+                               boolean contentLimitPresent) {
         List<String> errors = new ArrayList<>();
 
         String normalizedWebhook = webhookUrl == null ? "" : webhookUrl.trim();
@@ -56,9 +57,9 @@ record PluginSettings(
             errors.add("update-delay-seconds must be a non-negative integer.");
         }
 
-        Integer contentLimit = contentLimitValue == null
-                ? Integer.valueOf(DEFAULT_DISCORD_CONTENT_LENGTH)
-                : integerValue(contentLimitValue);
+        Integer contentLimit = contentLimitPresent
+                ? integerValue(contentLimitValue)
+                : Integer.valueOf(DEFAULT_DISCORD_CONTENT_LENGTH);
         if (contentLimit == null || contentLimit < MIN_DISCORD_CONTENT_LENGTH
                 || contentLimit > MAX_DISCORD_CONTENT_LENGTH) {
             errors.add("max-discord-content-characters must be an integer from 500 through 2000.");
