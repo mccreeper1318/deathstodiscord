@@ -9,6 +9,10 @@ All notable changes to DeathsToDiscord are documented here.
 - Added Dependabot configuration to check Gradle dependencies, the Gradle wrapper, and GitHub Actions weekly on the `dev` branch.
 - Paper API updates are excluded from Dependabot so Paper compatibility changes remain manually controlled.
 
+### Fixed
+
+- Fixed issue #33: webhook validation now accepts only HTTPS Discord webhook endpoints, rejects ordinary Discord/channel and non-Discord URLs, and message creation replaces an existing `wait` query parameter instead of appending a duplicate.
+
 ### Dependencies
 - Update `actions/setup-java` to `5`
 - Update `com.google.code.gson:gson` to `2.14.0`
