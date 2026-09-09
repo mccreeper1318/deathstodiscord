@@ -21,9 +21,55 @@ final class ConfigKeyPresence {
         }
 
         String content = yaml.charAt(0) == '\uFEFF' ? yaml.substring(1) : yaml;
+        int rootIndent = findRootIndent(content);
+        if (rootIndent < 0) {
+            return false;
+        }
+
         String quotedKey = Pattern.quote(key);
         Pattern keyPattern = Pattern.compile(
-                "(?m)^(?:" + quotedKey + "|\\\"" + quotedKey + "\\\"|'" + quotedKey + "')\\s*:");
-        return keyPattern.matcher(content).find();
+                "^(?:" + quotedKey + "|\\\"" + quotedKey + "\\\"|'" + quotedKey + "')\\s*:");
+
+        for (String line : content.split("\\R", -1)) {
+            int indent = leadingIndent(line);
+            if (indent != rootIndent) {
+                continue;
+            }
+
+            String trimmed = line.substring(indent);
+            if (keyPattern.matcher(trimmed).find()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static int findRootIndent(String content) {
+        int rootIndent = Integer.MAX_VALUE;
+        for (String line : content.split("\\R", -1)) {
+            int indent = leadingIndent(line);
+            String trimmed = line.substring(indent);
+            if (trimmed.isBlank()
+                    || trimmed.startsWith("#")
+                    || trimmed.equals("---")
+                    || trimmed.equals("...")
+                    || trimmed.startsWith("%")) {
+                continue;
+            }
+            rootIndent = Math.min(rootIndent, indent);
+        }
+        return rootIndent == Integer.MAX_VALUE ? -1 : rootIndent;
+    }
+
+    private static int leadingIndent(String line) {
+        int indent = 0;
+        while (indent < line.length()) {
+            char current = line.charAt(indent);
+            if (current != ' ' && current != '\t') {
+                break;
+            }
+            indent++;
+        }
+        return indent;
     }
 }
