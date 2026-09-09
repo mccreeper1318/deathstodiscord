@@ -20,7 +20,7 @@ final class DiscordWebhookClient {
     String createMessage(String webhookUrl, String content) throws Exception {
         HttpResponse<String> response = send(
                 HttpRequest.newBuilder()
-                        .uri(URI.create(withQueryParameter(webhookUrl, "wait=true")))
+                        .uri(createMessageUri(webhookUrl))
                         .timeout(Duration.ofSeconds(10))
                         .header("Content-Type", "application/json; charset=utf-8")
                         .POST(HttpRequest.BodyPublishers.ofString(
@@ -54,6 +54,10 @@ final class DiscordWebhookClient {
                 .build();
     }
 
+    static URI createMessageUri(String webhookUrl) {
+        return URI.create(withQueryParameter(webhookUrl, "wait", "true"));
+    }
+
     private HttpResponse<String> send(HttpRequest request) throws Exception {
         HttpResponse<String> response = http.send(
                 request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
@@ -74,8 +78,34 @@ final class DiscordWebhookClient {
         return content.substring(0, DISCORD_MAX_CONTENT_LENGTH);
     }
 
-    private static String withQueryParameter(String url, String parameter) {
-        return url.contains("?") ? url + "&" + parameter : url + "?" + parameter;
+    private static String withQueryParameter(String url, String name, String value) {
+        int queryIndex = url.indexOf('?');
+        String base = queryIndex < 0 ? url : url.substring(0, queryIndex);
+        String query = queryIndex < 0 ? "" : url.substring(queryIndex + 1);
+
+        StringBuilder updatedQuery = new StringBuilder();
+        if (!query.isBlank()) {
+            for (String parameter : query.split("&")) {
+                if (parameter.isBlank()) {
+                    continue;
+                }
+                int equalsIndex = parameter.indexOf('=');
+                String parameterName = equalsIndex < 0 ? parameter : parameter.substring(0, equalsIndex);
+                if (parameterName.equals(name)) {
+                    continue;
+                }
+                if (!updatedQuery.isEmpty()) {
+                    updatedQuery.append('&');
+                }
+                updatedQuery.append(parameter);
+            }
+        }
+
+        if (!updatedQuery.isEmpty()) {
+            updatedQuery.append('&');
+        }
+        updatedQuery.append(name).append('=').append(value);
+        return base + "?" + updatedQuery;
     }
 
     private static String messageUrl(String webhookUrl, String messageId) {
