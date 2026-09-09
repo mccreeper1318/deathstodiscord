@@ -22,6 +22,7 @@ All notable changes to DeathsToDiscord are documented here.
 - Update `gradle-wrapper` to `9.7.1`
 - Update `gradle/actions` to `6`
 - Update `actions/upload-artifact` to `7`
+- Update `io.papermc.paper:paper-api` to `26.2.build.121-stable`
 
 ## [1.4.1]
 
