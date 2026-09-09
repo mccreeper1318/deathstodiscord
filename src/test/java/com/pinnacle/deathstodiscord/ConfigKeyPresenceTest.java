@@ -16,6 +16,18 @@ class ConfigKeyPresenceTest {
     }
 
     @Test
+    void detectsUniformlyIndentedTopLevelKey() {
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(
+                "  webhook-url: \"example\"\n  max-discord-content-characters: null\n", KEY));
+    }
+
+    @Test
+    void detectsUniformlyIndentedQuotedTopLevelKey() {
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(
+                "    webhook-url: \"example\"\n    \"max-discord-content-characters\": null\n", KEY));
+    }
+
+    @Test
     void detectsTopLevelKeyWithValue() {
         assertTrue(ConfigKeyPresence.containsTopLevelKey(
                 "max-discord-content-characters: 1900\n", KEY));
@@ -34,6 +46,21 @@ class ConfigKeyPresenceTest {
                 + "  max-discord-content-characters:\n";
 
         assertFalse(ConfigKeyPresence.containsTopLevelKey(yaml, KEY));
+    }
+
+    @Test
+    void ignoresNestedKeyWhenRootMappingIsIndented() {
+        String yaml = "  nested:\n"
+                + "    max-discord-content-characters: null\n"
+                + "  objective-name: deaths\n";
+
+        assertFalse(ConfigKeyPresence.containsTopLevelKey(yaml, KEY));
+    }
+
+    @Test
+    void documentMarkersDoNotChangeIndentedRootLevel() {
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(
+                "---\n  webhook-url: \"example\"\n  max-discord-content-characters: null\n...\n", KEY));
     }
 
     @Test
