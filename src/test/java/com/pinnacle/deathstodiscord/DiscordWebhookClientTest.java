@@ -18,4 +18,20 @@ class DiscordWebhookClientTest {
                 "https://discord.com/api/webhooks/123/token/messages/789?thread_id=456",
                 request.uri().toString());
     }
+
+    @Test
+    void creationAddsWaitWhenTheWebhookHasNoQuery() {
+        assertEquals(
+                "https://discord.com/api/webhooks/123/token?wait=true",
+                DiscordWebhookClient.createMessageUri(
+                        "https://discord.com/api/webhooks/123/token").toString());
+    }
+
+    @Test
+    void creationPreservesOtherQueryParametersAndReplacesWait() {
+        assertEquals(
+                "https://discord.com/api/webhooks/123/token?thread_id=456&wait=true",
+                DiscordWebhookClient.createMessageUri(
+                        "https://discord.com/api/webhooks/123/token?wait=false&thread_id=456&wait=false").toString());
+    }
 }
