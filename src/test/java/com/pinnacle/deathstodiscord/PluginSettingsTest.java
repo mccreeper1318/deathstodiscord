@@ -27,7 +27,8 @@ class PluginSettingsTest {
                 10,
                 true,
                 2,
-                1900);
+                1900,
+                true);
 
         assertTrue(result.valid());
     }
@@ -35,7 +36,7 @@ class PluginSettingsTest {
     @Test
     void reportsEveryInvalidSetting() {
         PluginSettings.LoadResult result = PluginSettings.validate(
-                "not a url", "", "SIDEWAYS", -4, "yes", -1, 2500);
+                "not a url", "", "SIDEWAYS", -4, "yes", -1, 2500, true);
 
         assertFalse(result.valid());
         assertEquals(7, result.errors().size());
@@ -54,7 +55,8 @@ class PluginSettingsTest {
                 10,
                 true,
                 2,
-                1900);
+                1900,
+                true);
 
         assertFalse(result.valid());
         assertTrue(result.errors().stream().anyMatch(error -> error.contains("webhook-url")));
@@ -69,7 +71,8 @@ class PluginSettingsTest {
                 10,
                 true,
                 2,
-                1900);
+                1900,
+                true);
 
         assertFalse(result.valid());
         assertTrue(result.errors().stream().anyMatch(error -> error.contains("webhook-url")));
@@ -84,7 +87,8 @@ class PluginSettingsTest {
                 10,
                 true,
                 2,
-                1900);
+                1900,
+                true);
 
         assertFalse(result.valid());
         assertTrue(result.errors().stream().anyMatch(error -> error.contains("webhook-url")));
@@ -99,7 +103,8 @@ class PluginSettingsTest {
                 10,
                 true,
                 2,
-                1900);
+                1900,
+                true);
 
         assertFalse(result.valid());
         assertTrue(result.errors().stream().anyMatch(error -> error.contains("webhook-url")));
@@ -114,10 +119,27 @@ class PluginSettingsTest {
                 10,
                 true,
                 2,
-                null);
+                null,
+                false);
 
         assertTrue(result.valid());
         assertEquals(1900, result.settings().maxDiscordContentCharacters());
+    }
+
+    @Test
+    void rejectsExplicitNullContentLimit() {
+        PluginSettings.LoadResult result = PluginSettings.validate(
+                "https://discord.com/api/webhooks/123/token",
+                "deaths",
+                "ALL",
+                10,
+                true,
+                2,
+                null,
+                true);
+
+        assertFalse(result.valid());
+        assertTrue(result.errors().stream().anyMatch(error -> error.contains("max-discord")));
     }
 
     @Test
@@ -129,7 +151,8 @@ class PluginSettingsTest {
                 10,
                 true,
                 2,
-                "not-a-number");
+                "not-a-number",
+                true);
 
         assertFalse(result.valid());
     }
@@ -142,6 +165,7 @@ class PluginSettingsTest {
                 top,
                 true,
                 delay,
-                limit);
+                limit,
+                true);
     }
 }
