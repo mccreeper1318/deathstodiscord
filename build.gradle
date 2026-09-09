@@ -23,7 +23,7 @@ dependencies {
     testImplementation "org.junit.jupiter:junit-jupiter:5.11.4"
     testImplementation "com.google.code.gson:gson:2.14.0"
     testRuntimeOnly "io.papermc.paper:paper-api:26.2.build.62-beta"
-    testRuntimeOnly "org.junit.platform:junit-platform-launcher:1.11.4"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher:6.1.3"
 }
 
 tasks.withType(JavaCompile).configureEach {
