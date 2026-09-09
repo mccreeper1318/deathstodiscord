@@ -9,6 +9,16 @@ All notable changes to DeathsToDiscord are documented here.
 - Added Dependabot configuration to check Gradle dependencies, the Gradle wrapper, and GitHub Actions weekly on the `dev` branch.
 - Paper API updates are excluded from Dependabot so Paper compatibility changes remain manually controlled.
 
+### Dependencies
+- Update `actions/setup-java` to `5`
+- Update `com.google.code.gson:gson` to `2.14.0`
+- Update `actions/checkout` to `7`
+- Update `org.junit.platform:junit-platform-launcher` to `6.1.3`
+- Update `org.junit.jupiter:junit-jupiter` to `6.1.3`
+- Update `gradle-wrapper` to `9.7.1`
+- Update `gradle/actions` to `6`
+- Update `actions/upload-artifact` to `7`
+
 ## [1.4.1]
 
 ### Fixed
