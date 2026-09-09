@@ -4,6 +4,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Pattern;
 
 record PluginSettings(
         String webhookUrl,
@@ -18,14 +19,16 @@ record PluginSettings(
     private static final int MIN_DISCORD_CONTENT_LENGTH = 500;
     private static final int MAX_DISCORD_CONTENT_LENGTH = 2000;
     private static final int DEFAULT_DISCORD_CONTENT_LENGTH = 1900;
+    private static final Pattern DISCORD_WEBHOOK_PATH = Pattern.compile(
+            "^/api(?:/v\\d+)?/webhooks/[0-9]+/[^/]+/?$");
 
     static LoadResult validate(String webhookUrl, String objectiveName, Object modeValue, Object topValue,
                                Object showZeroDeathsValue, Object updateDelayValue, Object contentLimitValue) {
         List<String> errors = new ArrayList<>();
 
         String normalizedWebhook = webhookUrl == null ? "" : webhookUrl.trim();
-        if (isWebhookConfigured(normalizedWebhook) && !isValidHttpUri(normalizedWebhook)) {
-            errors.add("webhook-url must be a valid HTTP or HTTPS URL.");
+        if (isWebhookConfigured(normalizedWebhook) && !isValidDiscordWebhookUri(normalizedWebhook)) {
+            errors.add("webhook-url must be a valid Discord webhook URL.");
         }
 
         String normalizedObjective = objectiveName == null ? "" : objectiveName.trim();
@@ -89,12 +92,29 @@ record PluginSettings(
                 && !webhookUrl.contains("PASTE_WEBHOOK_URL_HERE");
     }
 
-    private static boolean isValidHttpUri(String value) {
+    private static boolean isValidDiscordWebhookUri(String value) {
         try {
             URI uri = URI.create(value);
-            return ("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))
-                    && uri.getHost() != null
-                    && uri.getFragment() == null;
+            if (!"https".equalsIgnoreCase(uri.getScheme())
+                    || uri.getHost() == null
+                    || uri.getUserInfo() != null
+                    || uri.getFragment() != null) {
+                return false;
+            }
+
+            String host = uri.getHost().toLowerCase(Locale.ROOT);
+            boolean discordHost = host.equals("discord.com")
+                    || host.equals("canary.discord.com")
+                    || host.equals("ptb.discord.com")
+                    || host.equals("discordapp.com")
+                    || host.equals("canary.discordapp.com")
+                    || host.equals("ptb.discordapp.com");
+            if (!discordHost) {
+                return false;
+            }
+
+            String path = uri.getPath();
+            return path != null && DISCORD_WEBHOOK_PATH.matcher(path).matches();
         } catch (IllegalArgumentException ignored) {
             return false;
         }
