@@ -112,6 +112,18 @@ class ConfigKeyPresenceTest {
     }
 
     @Test
+    void detectsMultilineExplicitYamlMappingKey() {
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(
+                "?\n  max-discord-content-characters\n: null\nobjective-name: deaths\n", KEY));
+    }
+
+    @Test
+    void detectsMultilineDecoratedExplicitYamlMappingKey() {
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(
+                "?\n  !!str &limit \"max\\u002ddiscord-content-characters\"\n: null\n", KEY));
+    }
+
+    @Test
     void detectsIndentedQuotedExplicitYamlMappingKeyWithComment() {
         assertTrue(ConfigKeyPresence.containsTopLevelKey(
                 "  ? \"max-discord-content-characters\" # explicit setting\n  : null\n  objective-name: deaths\n", KEY));
@@ -200,6 +212,36 @@ class ConfigKeyPresenceTest {
     }
 
     @Test
+    void detectsNullKeyInheritedThroughYamlMerge() {
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(
+                "defaults: &defaults {max-discord-content-characters: null}\n"
+                        + "<<: *defaults\nobjective-name: deaths\n", KEY));
+    }
+
+    @Test
+    void detectsKeyInheritedThroughYamlMergeSequence() {
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(
+                "first: &first {other: true}\n"
+                        + "second: &second {max-discord-content-characters: null}\n"
+                        + "<<: [*first, *second]\n", KEY));
+    }
+
+    @Test
+    void detectsKeyInheritedThroughNestedYamlMerge() {
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(
+                "base: &base {max-discord-content-characters: null}\n"
+                        + "middle: &middle {<<: *base, other: true}\n"
+                        + "<<: *middle\n", KEY));
+    }
+
+    @Test
+    void ignoresUnmergedAnchorContainingTargetKey() {
+        assertFalse(ConfigKeyPresence.containsTopLevelKey(
+                "defaults: &defaults {max-discord-content-characters: null}\n"
+                        + "objective-name: deaths\n", KEY));
+    }
+
+    @Test
     void treatsOmittedLegacyKeyAsAbsent() {
         assertFalse(ConfigKeyPresence.containsTopLevelKey(
                 "webhook-url: \"example\"\nobjective-name: deaths\n", KEY));
@@ -236,7 +278,7 @@ class ConfigKeyPresenceTest {
     }
 
     @Test
-    void markerLikeRootContentStillDeterminesRootIndent() {
+    void markerLikeRootContentDoesNotCreateFalsePositive() {
         assertFalse(ConfigKeyPresence.containsTopLevelKey(
                 "---not-a-document-marker: true\n  max-discord-content-characters: null\n", KEY));
     }
