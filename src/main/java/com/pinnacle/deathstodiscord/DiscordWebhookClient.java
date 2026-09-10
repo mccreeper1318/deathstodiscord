@@ -112,6 +112,9 @@ final class DiscordWebhookClient {
         int queryIndex = webhookUrl.indexOf('?');
         String base = queryIndex < 0 ? webhookUrl : webhookUrl.substring(0, queryIndex);
         String query = queryIndex < 0 ? "" : webhookUrl.substring(queryIndex);
+        if (base.endsWith("/")) {
+            base = base.substring(0, base.length() - 1);
+        }
         return base + "/messages/" + messageId + query;
     }
 }
