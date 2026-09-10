@@ -64,6 +64,18 @@ class ConfigKeyPresenceTest {
     }
 
     @Test
+    void documentMarkersWithInlineCommentsDoNotChangeIndentedRootLevel() {
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(
+                "--- # config\n  webhook-url: \"example\"\n  max-discord-content-characters: null\n... # end\n", KEY));
+    }
+
+    @Test
+    void markerLikeRootContentStillDeterminesRootIndent() {
+        assertFalse(ConfigKeyPresence.containsTopLevelKey(
+                "---not-a-document-marker: true\n  max-discord-content-characters: null\n", KEY));
+    }
+
+    @Test
     void detectsQuotedTopLevelKeysAndUtf8Bom() {
         assertTrue(ConfigKeyPresence.containsTopLevelKey(
                 "\uFEFF\"max-discord-content-characters\": null\n", KEY));
