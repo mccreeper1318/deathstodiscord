@@ -41,7 +41,7 @@ final class ConfigKeyPresence {
             }
 
             String trimmed = line.substring(indent);
-            if (keyPattern.matcher(trimmed).find()) {
+            if (keyPattern.matcher(trimmed).find() || isExplicitKeyLine(trimmed, key)) {
                 return true;
             }
         }
@@ -187,11 +187,57 @@ final class ConfigKeyPresence {
         return false;
     }
 
+    private static boolean isExplicitKeyLine(String line, String key) {
+        if (line.length() < 2 || line.charAt(0) != '?' || !Character.isWhitespace(line.charAt(1))) {
+            return false;
+        }
+        return matchesKeyToken(stripTrailingComment(line), key);
+    }
+
     private static boolean matchesKeyToken(String token, String key) {
         String trimmed = token.trim();
+        if (trimmed.length() >= 2 && trimmed.charAt(0) == '?' && Character.isWhitespace(trimmed.charAt(1))) {
+            trimmed = trimmed.substring(1).stripLeading();
+        }
         return trimmed.equals(key)
                 || trimmed.equals("\"" + key + "\"")
                 || trimmed.equals("'" + key + "'");
+    }
+
+    private static String stripTrailingComment(String value) {
+        boolean singleQuoted = false;
+        boolean doubleQuoted = false;
+        boolean escaped = false;
+
+        for (int index = 0; index < value.length(); index++) {
+            char current = value.charAt(index);
+            if (doubleQuoted) {
+                if (escaped) {
+                    escaped = false;
+                } else if (current == '\\') {
+                    escaped = true;
+                } else if (current == '"') {
+                    doubleQuoted = false;
+                }
+                continue;
+            }
+            if (singleQuoted) {
+                if (current == '\'' && index + 1 < value.length() && value.charAt(index + 1) == '\'') {
+                    index++;
+                } else if (current == '\'') {
+                    singleQuoted = false;
+                }
+                continue;
+            }
+            if (current == '"') {
+                doubleQuoted = true;
+            } else if (current == '\'') {
+                singleQuoted = true;
+            } else if (current == '#' && index > 0 && Character.isWhitespace(value.charAt(index - 1))) {
+                return value.substring(0, index).stripTrailing();
+            }
+        }
+        return value;
     }
 
     private static String stripLeadingFlowComments(String entry) {
