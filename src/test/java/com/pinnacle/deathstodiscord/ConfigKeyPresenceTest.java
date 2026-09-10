@@ -28,6 +28,30 @@ class ConfigKeyPresenceTest {
     }
 
     @Test
+    void detectsUnicodeEscapedDoubleQuotedTopLevelKey() {
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(
+                "\"max\\u002ddiscord-content-characters\": null\n", KEY));
+    }
+
+    @Test
+    void detectsHexEscapedDoubleQuotedFlowKey() {
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(
+                "{\"max\\x2ddiscord-content-characters\": null, objective-name: deaths}\n", KEY));
+    }
+
+    @Test
+    void detectsUnicodeEscapedExplicitMappingKey() {
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(
+                "? \"max\\U0000002ddiscord-content-characters\"\n: null\n", KEY));
+    }
+
+    @Test
+    void differentEscapedDoubleQuotedKeyDoesNotMatch() {
+        assertFalse(ConfigKeyPresence.containsTopLevelKey(
+                "\"max\\u002ediscord-content-characters\": null\n", KEY));
+    }
+
+    @Test
     void detectsTopLevelKeyWithValue() {
         assertTrue(ConfigKeyPresence.containsTopLevelKey(
                 "max-discord-content-characters: 1900\n", KEY));
