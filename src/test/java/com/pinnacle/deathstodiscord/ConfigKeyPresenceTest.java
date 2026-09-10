@@ -34,6 +34,34 @@ class ConfigKeyPresenceTest {
     }
 
     @Test
+    void detectsFlowStyleRootMappingKey() {
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(
+                "{webhook-url: \"example\", max-discord-content-characters: null}\n", KEY));
+    }
+
+    @Test
+    void detectsQuotedFlowStyleRootMappingKey() {
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(
+                "{webhook-url: \"example\", 'max-discord-content-characters': null}\n", KEY));
+    }
+
+    @Test
+    void detectsMultilineFlowStyleRootMappingKeyAfterDocumentMarker() {
+        String yaml = "--- # config\n"
+                + "  {webhook-url: \"example\",\n"
+                + "   # content limit stays explicit\n"
+                + "   max-discord-content-characters: null}\n";
+
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(yaml, KEY));
+    }
+
+    @Test
+    void ignoresNestedFlowStyleMappingKey() {
+        assertFalse(ConfigKeyPresence.containsTopLevelKey(
+                "{nested: {max-discord-content-characters: null}, objective-name: deaths}\n", KEY));
+    }
+
+    @Test
     void treatsOmittedLegacyKeyAsAbsent() {
         assertFalse(ConfigKeyPresence.containsTopLevelKey(
                 "webhook-url: \"example\"\nobjective-name: deaths\n", KEY));
