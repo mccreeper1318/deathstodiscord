@@ -57,7 +57,12 @@ record PluginSettings(
             errors.add("update-delay-seconds must be a non-negative integer.");
         }
 
-        Integer contentLimit = contentLimitPresent
+        // A non-null value from Bukkit proves the setting is present, even when a raw YAML
+        // presence scan cannot recognize the syntax that produced it (for example merges or
+        // standalone node decorators). The raw presence flag is only needed to distinguish
+        // an explicitly configured null from a truly omitted legacy setting.
+        boolean effectiveContentLimitPresent = contentLimitPresent || contentLimitValue != null;
+        Integer contentLimit = effectiveContentLimitPresent
                 ? integerValue(contentLimitValue)
                 : Integer.valueOf(DEFAULT_DISCORD_CONTENT_LENGTH);
         if (contentLimit == null || contentLimit < MIN_DISCORD_CONTENT_LENGTH
