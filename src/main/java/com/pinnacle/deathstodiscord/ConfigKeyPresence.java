@@ -51,14 +51,31 @@ final class ConfigKeyPresence {
             String trimmed = line.substring(indent);
             if (trimmed.isBlank()
                     || trimmed.startsWith("#")
-                    || trimmed.equals("---")
-                    || trimmed.equals("...")
+                    || isDocumentMarker(trimmed)
                     || trimmed.startsWith("%")) {
                 continue;
             }
             rootIndent = Math.min(rootIndent, indent);
         }
         return rootIndent == Integer.MAX_VALUE ? -1 : rootIndent;
+    }
+
+    private static boolean isDocumentMarker(String trimmed) {
+        if (!(trimmed.startsWith("---") || trimmed.startsWith("..."))) {
+            return false;
+        }
+        if (trimmed.length() == 3) {
+            return true;
+        }
+
+        String suffix = trimmed.substring(3);
+        if (suffix.isBlank()) {
+            return true;
+        }
+        if (!Character.isWhitespace(suffix.charAt(0))) {
+            return false;
+        }
+        return suffix.stripLeading().startsWith("#");
     }
 
     private static int leadingIndent(String line) {
