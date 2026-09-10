@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.regex.Pattern;
 
 final class ConfigKeyPresence {
 
@@ -30,10 +29,6 @@ final class ConfigKeyPresence {
             return false;
         }
 
-        String quotedKey = Pattern.quote(key);
-        Pattern keyPattern = Pattern.compile(
-                "^(?:" + quotedKey + "|\\\"" + quotedKey + "\\\"|'" + quotedKey + "')\\s*:");
-
         for (String line : content.split("\\R", -1)) {
             int indent = leadingIndent(line);
             if (indent != rootIndent) {
@@ -41,7 +36,7 @@ final class ConfigKeyPresence {
             }
 
             String trimmed = line.substring(indent);
-            if (keyPattern.matcher(trimmed).find() || isExplicitKeyLine(trimmed, key)) {
+            if (isSimpleMappingKeyLine(trimmed, key) || isExplicitKeyLine(trimmed, key)) {
                 return true;
             }
         }
@@ -132,6 +127,17 @@ final class ConfigKeyPresence {
             return false;
         }
 
+        int colonIndex = findMappingColon(candidate);
+        return colonIndex >= 0 && matchesKeyToken(candidate.substring(0, colonIndex), key);
+    }
+
+    private static boolean isSimpleMappingKeyLine(String line, String key) {
+        String candidate = stripTrailingComment(line);
+        int colonIndex = findMappingColon(candidate);
+        return colonIndex >= 0 && matchesKeyToken(candidate.substring(0, colonIndex), key);
+    }
+
+    private static int findMappingColon(String candidate) {
         int curlyDepth = 0;
         int squareDepth = 0;
         boolean singleQuoted = false;
@@ -177,14 +183,14 @@ final class ConfigKeyPresence {
                 case ']' -> squareDepth--;
                 case ':' -> {
                     if (curlyDepth == 0 && squareDepth == 0) {
-                        return matchesKeyToken(candidate.substring(0, index), key);
+                        return index;
                     }
                 }
                 default -> {
                 }
             }
         }
-        return false;
+        return -1;
     }
 
     private static boolean isExplicitKeyLine(String line, String key) {
@@ -199,9 +205,98 @@ final class ConfigKeyPresence {
         if (trimmed.length() >= 2 && trimmed.charAt(0) == '?' && Character.isWhitespace(trimmed.charAt(1))) {
             trimmed = trimmed.substring(1).stripLeading();
         }
-        return trimmed.equals(key)
-                || trimmed.equals("\"" + key + "\"")
-                || trimmed.equals("'" + key + "'");
+
+        String decoded = decodeYamlKeyScalar(trimmed);
+        return key.equals(decoded);
+    }
+
+    private static String decodeYamlKeyScalar(String token) {
+        if (token.length() >= 2 && token.charAt(0) == '\'' && token.charAt(token.length() - 1) == '\'') {
+            return token.substring(1, token.length() - 1).replace("''", "'");
+        }
+        if (token.length() >= 2 && token.charAt(0) == '"' && token.charAt(token.length() - 1) == '"') {
+            return decodeDoubleQuotedScalar(token.substring(1, token.length() - 1));
+        }
+        return token;
+    }
+
+    private static String decodeDoubleQuotedScalar(String value) {
+        StringBuilder decoded = new StringBuilder(value.length());
+        for (int index = 0; index < value.length(); index++) {
+            char current = value.charAt(index);
+            if (current != '\\') {
+                decoded.append(current);
+                continue;
+            }
+
+            if (++index >= value.length()) {
+                return null;
+            }
+
+            char escape = value.charAt(index);
+            switch (escape) {
+                case '0' -> decoded.append('\0');
+                case 'a' -> decoded.append('\u0007');
+                case 'b' -> decoded.append('\b');
+                case 't', '\t' -> decoded.append('\t');
+                case 'n' -> decoded.append('\n');
+                case 'v' -> decoded.append('\u000B');
+                case 'f' -> decoded.append('\f');
+                case 'r' -> decoded.append('\r');
+                case 'e' -> decoded.append('\u001B');
+                case ' ' -> decoded.append(' ');
+                case '"' -> decoded.append('"');
+                case '/' -> decoded.append('/');
+                case '\\' -> decoded.append('\\');
+                case 'N' -> decoded.append('\u0085');
+                case '_' -> decoded.append('\u00A0');
+                case 'L' -> decoded.append('\u2028');
+                case 'P' -> decoded.append('\u2029');
+                case 'x' -> {
+                    Integer codePoint = parseHexEscape(value, index + 1, 2);
+                    if (codePoint == null) {
+                        return null;
+                    }
+                    decoded.append((char) codePoint.intValue());
+                    index += 2;
+                }
+                case 'u' -> {
+                    Integer codePoint = parseHexEscape(value, index + 1, 4);
+                    if (codePoint == null) {
+                        return null;
+                    }
+                    decoded.append((char) codePoint.intValue());
+                    index += 4;
+                }
+                case 'U' -> {
+                    Integer codePoint = parseHexEscape(value, index + 1, 8);
+                    if (codePoint == null || !Character.isValidCodePoint(codePoint)) {
+                        return null;
+                    }
+                    decoded.appendCodePoint(codePoint);
+                    index += 8;
+                }
+                default -> {
+                    return null;
+                }
+            }
+        }
+        return decoded.toString();
+    }
+
+    private static Integer parseHexEscape(String value, int start, int length) {
+        if (start + length > value.length()) {
+            return null;
+        }
+        int result = 0;
+        for (int index = start; index < start + length; index++) {
+            int digit = Character.digit(value.charAt(index), 16);
+            if (digit < 0) {
+                return null;
+            }
+            result = (result << 4) | digit;
+        }
+        return result;
     }
 
     private static String stripTrailingComment(String value) {
