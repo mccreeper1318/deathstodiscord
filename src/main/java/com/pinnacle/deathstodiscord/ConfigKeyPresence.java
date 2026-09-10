@@ -127,14 +127,16 @@ final class ConfigKeyPresence {
             return false;
         }
 
-        int colonIndex = findMappingColon(candidate);
-        return colonIndex >= 0 && matchesKeyToken(candidate.substring(0, colonIndex), key);
+        String mapping = stripLeadingKeyDecorators(candidate);
+        int colonIndex = findMappingColon(mapping);
+        return colonIndex >= 0 && matchesKeyToken(mapping.substring(0, colonIndex), key);
     }
 
     private static boolean isSimpleMappingKeyLine(String line, String key) {
         String candidate = stripTrailingComment(line);
-        int colonIndex = findMappingColon(candidate);
-        return colonIndex >= 0 && matchesKeyToken(candidate.substring(0, colonIndex), key);
+        String mapping = stripLeadingKeyDecorators(candidate);
+        int colonIndex = findMappingColon(mapping);
+        return colonIndex >= 0 && matchesKeyToken(mapping.substring(0, colonIndex), key);
     }
 
     private static int findMappingColon(String candidate) {
@@ -201,13 +203,55 @@ final class ConfigKeyPresence {
     }
 
     private static boolean matchesKeyToken(String token, String key) {
-        String trimmed = token.trim();
-        if (trimmed.length() >= 2 && trimmed.charAt(0) == '?' && Character.isWhitespace(trimmed.charAt(1))) {
-            trimmed = trimmed.substring(1).stripLeading();
+        String normalized = stripLeadingKeyDecorators(token);
+        String decoded = decodeYamlKeyScalar(normalized);
+        return key.equals(decoded);
+    }
+
+    private static String stripLeadingKeyDecorators(String token) {
+        String remaining = token.trim();
+        if (remaining.length() >= 2 && remaining.charAt(0) == '?' && Character.isWhitespace(remaining.charAt(1))) {
+            remaining = remaining.substring(1).stripLeading();
         }
 
-        String decoded = decodeYamlKeyScalar(trimmed);
-        return key.equals(decoded);
+        while (!remaining.isEmpty()) {
+            int propertyLength = yamlKeyPropertyLength(remaining);
+            if (propertyLength < 0) {
+                break;
+            }
+            if (propertyLength >= remaining.length()) {
+                return "";
+            }
+            if (!Character.isWhitespace(remaining.charAt(propertyLength))) {
+                break;
+            }
+            remaining = remaining.substring(propertyLength).stripLeading();
+        }
+        return remaining;
+    }
+
+    private static int yamlKeyPropertyLength(String value) {
+        if (value.charAt(0) == '&') {
+            int end = 1;
+            while (end < value.length() && !Character.isWhitespace(value.charAt(end))) {
+                end++;
+            }
+            return end > 1 ? end : -1;
+        }
+        if (value.charAt(0) != '!') {
+            return -1;
+        }
+
+        if (value.startsWith("!<")) {
+            int close = value.indexOf('>', 2);
+            return close < 0 ? -1 : close + 1;
+        }
+
+        int end = 1;
+        while (end < value.length() && !Character.isWhitespace(value.charAt(end))) {
+            end++;
+        }
+        return end;
     }
 
     private static String decodeYamlKeyScalar(String token) {
