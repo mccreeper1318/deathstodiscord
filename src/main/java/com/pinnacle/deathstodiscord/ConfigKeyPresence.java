@@ -43,6 +43,8 @@ final class ConfigKeyPresence {
         try {
             LoaderOptions loaderOptions = new LoaderOptions();
             loaderOptions.setMaxAliasesForCollections(Integer.MAX_VALUE);
+            loaderOptions.setCodePointLimit(Integer.MAX_VALUE);
+            loaderOptions.setNestingDepthLimit(100);
             root = new Yaml(loaderOptions).compose(new StringReader(content));
         } catch (RuntimeException error) {
             return false;
