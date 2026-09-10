@@ -5,10 +5,14 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
 
+import java.io.IOException;
 import java.net.http.HttpClient;
 import java.time.Duration;
+import java.util.logging.Level;
 
 public class DeathsToDiscordPlugin extends org.bukkit.plugin.java.JavaPlugin {
+
+    private static final String CONTENT_LIMIT_PATH = "max-discord-content-characters";
 
     private final UpdateCycleState deathUpdateState = new UpdateCycleState();
     private final OrderedSnapshotDispatcher snapshotDispatcher = new OrderedSnapshotDispatcher();
@@ -111,6 +115,9 @@ public class DeathsToDiscordPlugin extends org.bukkit.plugin.java.JavaPlugin {
     }
 
     private boolean loadAndApplySettings(CommandSender sender, boolean preservePreviousOnFailure) {
+        Object contentLimitValue = getConfig().get(CONTENT_LIMIT_PATH, null);
+        boolean contentLimitPresent = contentLimitKeyPresent();
+
         PluginSettings.LoadResult result = PluginSettings.validate(
                 getConfig().getString("webhook-url"),
                 getConfig().getString("objective-name"),
@@ -118,7 +125,8 @@ public class DeathsToDiscordPlugin extends org.bukkit.plugin.java.JavaPlugin {
                 getConfig().get("top"),
                 getConfig().get("show-zero-deaths"),
                 getConfig().get("update-delay-seconds"),
-                getConfig().get("max-discord-content-characters"));
+                contentLimitValue,
+                contentLimitPresent);
         if (!result.valid()) {
             for (String error : result.errors()) {
                 getLogger().severe("Invalid configuration: " + error);
@@ -144,6 +152,19 @@ public class DeathsToDiscordPlugin extends org.bukkit.plugin.java.JavaPlugin {
                     "Webhook URL is not set! Set it in config.yml (webhook-url). Plugin will not post.");
         }
         return true;
+    }
+
+    private boolean contentLimitKeyPresent() {
+        try {
+            return ConfigKeyPresence.containsTopLevelKey(
+                    getDataFolder().toPath().resolve("config.yml"), CONTENT_LIMIT_PATH);
+        } catch (IOException error) {
+            getLogger().log(Level.WARNING,
+                    "Could not inspect config.yml for explicit max-discord-content-characters presence; "
+                            + "treating the setting as explicitly configured.",
+                    error);
+            return true;
+        }
     }
 
     private void migrateLegacyMessageId(String fingerprint) {
