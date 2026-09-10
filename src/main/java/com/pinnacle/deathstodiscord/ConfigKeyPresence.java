@@ -1,5 +1,6 @@
 package com.pinnacle.deathstodiscord;
 
+import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.nodes.AnchorNode;
 import org.yaml.snakeyaml.nodes.MappingNode;
@@ -40,7 +41,9 @@ final class ConfigKeyPresence {
         String content = yaml.charAt(0) == '\uFEFF' ? yaml.substring(1) : yaml;
         final Node root;
         try {
-            root = new Yaml().compose(new StringReader(content));
+            LoaderOptions loaderOptions = new LoaderOptions();
+            loaderOptions.setMaxAliasesForCollections(Integer.MAX_VALUE);
+            root = new Yaml(loaderOptions).compose(new StringReader(content));
         } catch (RuntimeException error) {
             return false;
         }
