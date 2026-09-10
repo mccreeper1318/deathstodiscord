@@ -242,6 +242,17 @@ class ConfigKeyPresenceTest {
     }
 
     @Test
+    void acceptsBukkitScaleAliasCountsWhenCheckingPresence() {
+        StringBuilder yaml = new StringBuilder("template: &template {nested: true}\naliases:\n");
+        for (int index = 0; index < 51; index++) {
+            yaml.append("  - *template\n");
+        }
+        yaml.append("max-discord-content-characters: null\n");
+
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(yaml.toString(), KEY));
+    }
+
+    @Test
     void treatsOmittedLegacyKeyAsAbsent() {
         assertFalse(ConfigKeyPresence.containsTopLevelKey(
                 "webhook-url: \"example\"\nobjective-name: deaths\n", KEY));
