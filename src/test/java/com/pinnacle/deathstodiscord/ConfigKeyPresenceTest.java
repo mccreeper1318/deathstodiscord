@@ -158,6 +158,48 @@ class ConfigKeyPresenceTest {
     }
 
     @Test
+    void ignoresColumnZeroContinuationInsideNestedFlowMapping() {
+        assertFalse(ConfigKeyPresence.containsTopLevelKey(
+                "nested: {\nmax-discord-content-characters: null\n}\nobjective-name: deaths\n", KEY));
+    }
+
+    @Test
+    void ignoresColumnZeroContinuationInsideNestedFlowSequence() {
+        assertFalse(ConfigKeyPresence.containsTopLevelKey(
+                "nested: [\n{max-discord-content-characters: null}\n]\nobjective-name: deaths\n", KEY));
+    }
+
+    @Test
+    void resumesRootScanningAfterNestedFlowValueCloses() {
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(
+                "nested: {\nother: null\n}\nmax-discord-content-characters: 1900\n", KEY));
+    }
+
+    @Test
+    void detectsAnchoredRootFlowMapping() {
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(
+                "&config {max-discord-content-characters: 500}\n", KEY));
+    }
+
+    @Test
+    void detectsTaggedRootFlowMapping() {
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(
+                "!!map {max-discord-content-characters: null}\n", KEY));
+    }
+
+    @Test
+    void detectsCombinedDecoratorsOnRootFlowMapping() {
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(
+                "!!map &config {\"max\\u002ddiscord-content-characters\": null}\n", KEY));
+    }
+
+    @Test
+    void ignoresDecoratedNestedFlowContinuation() {
+        assertFalse(ConfigKeyPresence.containsTopLevelKey(
+                "nested: &child {\nmax-discord-content-characters: null\n}\nobjective-name: deaths\n", KEY));
+    }
+
+    @Test
     void treatsOmittedLegacyKeyAsAbsent() {
         assertFalse(ConfigKeyPresence.containsTopLevelKey(
                 "webhook-url: \"example\"\nobjective-name: deaths\n", KEY));
