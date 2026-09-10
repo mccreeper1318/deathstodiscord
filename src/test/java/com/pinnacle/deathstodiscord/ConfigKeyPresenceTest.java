@@ -52,6 +52,54 @@ class ConfigKeyPresenceTest {
     }
 
     @Test
+    void detectsTaggedTopLevelKey() {
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(
+                "!!str max-discord-content-characters: null\n", KEY));
+    }
+
+    @Test
+    void detectsAnchoredTopLevelKey() {
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(
+                "&limit max-discord-content-characters: null\n", KEY));
+    }
+
+    @Test
+    void detectsCombinedPropertiesOnQuotedTopLevelKey() {
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(
+                "!!str &limit \"max\\u002ddiscord-content-characters\": null\n", KEY));
+    }
+
+    @Test
+    void detectsVerbatimTaggedTopLevelKey() {
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(
+                "!<tag:yaml.org,2002:str> max-discord-content-characters: null\n", KEY));
+    }
+
+    @Test
+    void detectsPropertiesOnExplicitMappingKey() {
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(
+                "? &limit !!str max-discord-content-characters\n: null\n", KEY));
+    }
+
+    @Test
+    void detectsPropertiesOnFlowStyleRootKey() {
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(
+                "{!!str &limit max-discord-content-characters: null, objective-name: deaths}\n", KEY));
+    }
+
+    @Test
+    void ignoresPropertiesOnNestedKey() {
+        assertFalse(ConfigKeyPresence.containsTopLevelKey(
+                "nested:\n  !!str &limit max-discord-content-characters: null\nobjective-name: deaths\n", KEY));
+    }
+
+    @Test
+    void differentTaggedKeyDoesNotMatch() {
+        assertFalse(ConfigKeyPresence.containsTopLevelKey(
+                "!!str max-discord-content-character: null\n", KEY));
+    }
+
+    @Test
     void detectsTopLevelKeyWithValue() {
         assertTrue(ConfigKeyPresence.containsTopLevelKey(
                 "max-discord-content-characters: 1900\n", KEY));
