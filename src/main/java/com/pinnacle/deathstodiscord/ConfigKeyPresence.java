@@ -29,34 +29,43 @@ final class ConfigKeyPresence {
             return false;
         }
 
+        FlowState flowState = new FlowState();
         for (String line : content.split("\\R", -1)) {
             int indent = leadingIndent(line);
-            if (indent != rootIndent) {
-                continue;
-            }
-
+            boolean insideFlow = flowState.insideFlow();
             String trimmed = line.substring(indent);
-            if (isSimpleMappingKeyLine(trimmed, key) || isExplicitKeyLine(trimmed, key)) {
+
+            if (!insideFlow
+                    && indent == rootIndent
+                    && !isIgnorableRootLine(trimmed)
+                    && (isSimpleMappingKeyLine(trimmed, key) || isExplicitKeyLine(trimmed, key))) {
                 return true;
             }
+
+            updateFlowState(line, flowState);
         }
         return false;
     }
 
     private static boolean containsRootFlowMappingKey(String content, String key) {
         int rootStart = firstMeaningfulContentStart(content);
-        if (rootStart < 0 || content.charAt(rootStart) != '{') {
+        if (rootStart < 0) {
+            return false;
+        }
+
+        int flowStart = skipRootNodeDecorators(content, rootStart);
+        if (flowStart < 0 || flowStart >= content.length() || content.charAt(flowStart) != '{') {
             return false;
         }
 
         int curlyDepth = 1;
         int squareDepth = 0;
-        int entryStart = rootStart + 1;
+        int entryStart = flowStart + 1;
         boolean singleQuoted = false;
         boolean doubleQuoted = false;
         boolean escaped = false;
 
-        for (int index = rootStart + 1; index < content.length(); index++) {
+        for (int index = flowStart + 1; index < content.length(); index++) {
             char current = content.charAt(index);
 
             if (doubleQuoted) {
@@ -215,7 +224,7 @@ final class ConfigKeyPresence {
         }
 
         while (!remaining.isEmpty()) {
-            int propertyLength = yamlKeyPropertyLength(remaining);
+            int propertyLength = yamlNodePropertyLength(remaining, 0);
             if (propertyLength < 0) {
                 break;
             }
@@ -230,28 +239,85 @@ final class ConfigKeyPresence {
         return remaining;
     }
 
-    private static int yamlKeyPropertyLength(String value) {
-        if (value.charAt(0) == '&') {
-            int end = 1;
-            while (end < value.length() && !Character.isWhitespace(value.charAt(end))) {
-                end++;
+    private static int skipRootNodeDecorators(String content, int start) {
+        int index = start;
+        while (index < content.length()) {
+            int propertyLength = yamlNodePropertyLength(content, index);
+            if (propertyLength < 0) {
+                return index;
             }
-            return end > 1 ? end : -1;
+
+            int afterProperty = index + propertyLength;
+            int afterSeparation = skipYamlSeparation(content, afterProperty);
+            if (afterSeparation == afterProperty) {
+                return index;
+            }
+            index = afterSeparation;
         }
-        if (value.charAt(0) != '!') {
+        return index;
+    }
+
+    private static int skipYamlSeparation(String content, int start) {
+        int index = start;
+        boolean consumed = false;
+
+        while (index < content.length()) {
+            while (index < content.length() && Character.isWhitespace(content.charAt(index))) {
+                index++;
+                consumed = true;
+            }
+
+            if (index < content.length() && content.charAt(index) == '#') {
+                int newline = content.indexOf('\n', index + 1);
+                if (newline < 0) {
+                    return content.length();
+                }
+                index = newline + 1;
+                consumed = true;
+                continue;
+            }
+            break;
+        }
+
+        return consumed ? index : start;
+    }
+
+    private static int yamlNodePropertyLength(String value, int start) {
+        if (start < 0 || start >= value.length()) {
             return -1;
         }
 
-        if (value.startsWith("!<")) {
-            int close = value.indexOf('>', 2);
-            return close < 0 ? -1 : close + 1;
+        char first = value.charAt(start);
+        if (first == '&') {
+            int end = start + 1;
+            while (end < value.length() && !isPropertyTerminator(value.charAt(end))) {
+                end++;
+            }
+            return end > start + 1 ? end - start : -1;
+        }
+        if (first != '!') {
+            return -1;
         }
 
-        int end = 1;
-        while (end < value.length() && !Character.isWhitespace(value.charAt(end))) {
+        if (start + 1 < value.length() && value.charAt(start + 1) == '<') {
+            int close = value.indexOf('>', start + 2);
+            return close < 0 ? -1 : close + 1 - start;
+        }
+
+        int end = start + 1;
+        while (end < value.length() && !isPropertyTerminator(value.charAt(end))) {
             end++;
         }
-        return end;
+        return end - start;
+    }
+
+    private static boolean isPropertyTerminator(char value) {
+        return Character.isWhitespace(value)
+                || value == '['
+                || value == ']'
+                || value == '{'
+                || value == '}'
+                || value == ',';
     }
 
     private static String decodeYamlKeyScalar(String token) {
@@ -403,10 +469,7 @@ final class ConfigKeyPresence {
 
             int indent = leadingIndent(line);
             String trimmed = line.substring(indent);
-            if (!trimmed.isBlank()
-                    && !trimmed.startsWith("#")
-                    && !isDocumentMarker(trimmed)
-                    && !trimmed.startsWith("%")) {
+            if (!isIgnorableRootLine(trimmed)) {
                 return offset + indent;
             }
 
@@ -420,18 +483,78 @@ final class ConfigKeyPresence {
 
     private static int findRootIndent(String content) {
         int rootIndent = Integer.MAX_VALUE;
+        FlowState flowState = new FlowState();
+
         for (String line : content.split("\\R", -1)) {
             int indent = leadingIndent(line);
+            boolean insideFlow = flowState.insideFlow();
             String trimmed = line.substring(indent);
-            if (trimmed.isBlank()
-                    || trimmed.startsWith("#")
-                    || isDocumentMarker(trimmed)
-                    || trimmed.startsWith("%")) {
-                continue;
+
+            if (!insideFlow && !isIgnorableRootLine(trimmed)) {
+                rootIndent = Math.min(rootIndent, indent);
             }
-            rootIndent = Math.min(rootIndent, indent);
+
+            updateFlowState(line, flowState);
         }
         return rootIndent == Integer.MAX_VALUE ? -1 : rootIndent;
+    }
+
+    private static boolean isIgnorableRootLine(String trimmed) {
+        return trimmed.isBlank()
+                || trimmed.startsWith("#")
+                || isDocumentMarker(trimmed)
+                || trimmed.startsWith("%");
+    }
+
+    private static void updateFlowState(String line, FlowState state) {
+        for (int index = 0; index < line.length(); index++) {
+            char current = line.charAt(index);
+
+            if (state.doubleQuoted) {
+                if (state.escaped) {
+                    state.escaped = false;
+                } else if (current == '\\') {
+                    state.escaped = true;
+                } else if (current == '"') {
+                    state.doubleQuoted = false;
+                }
+                continue;
+            }
+
+            if (state.singleQuoted) {
+                if (current == '\'' && index + 1 < line.length() && line.charAt(index + 1) == '\'') {
+                    index++;
+                } else if (current == '\'') {
+                    state.singleQuoted = false;
+                }
+                continue;
+            }
+
+            if (current == '"') {
+                state.doubleQuoted = true;
+                continue;
+            }
+            if (current == '\'') {
+                state.singleQuoted = true;
+                continue;
+            }
+            if (current == '#' && isCommentStart(line, index)) {
+                break;
+            }
+
+            switch (current) {
+                case '{' -> state.curlyDepth++;
+                case '}' -> state.curlyDepth = Math.max(0, state.curlyDepth - 1);
+                case '[' -> state.squareDepth++;
+                case ']' -> state.squareDepth = Math.max(0, state.squareDepth - 1);
+                default -> {
+                }
+            }
+        }
+
+        if (!state.doubleQuoted) {
+            state.escaped = false;
+        }
     }
 
     private static boolean isDocumentMarker(String trimmed) {
@@ -470,5 +593,17 @@ final class ConfigKeyPresence {
             indent++;
         }
         return indent;
+    }
+
+    private static final class FlowState {
+        private int curlyDepth;
+        private int squareDepth;
+        private boolean singleQuoted;
+        private boolean doubleQuoted;
+        private boolean escaped;
+
+        private boolean insideFlow() {
+            return curlyDepth > 0 || squareDepth > 0;
+        }
     }
 }
