@@ -34,6 +34,24 @@ class ConfigKeyPresenceTest {
     }
 
     @Test
+    void detectsExplicitYamlMappingKey() {
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(
+                "? max-discord-content-characters\n: null\nobjective-name: deaths\n", KEY));
+    }
+
+    @Test
+    void detectsIndentedQuotedExplicitYamlMappingKeyWithComment() {
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(
+                "  ? \"max-discord-content-characters\" # explicit setting\n  : null\n  objective-name: deaths\n", KEY));
+    }
+
+    @Test
+    void ignoresNestedExplicitYamlMappingKey() {
+        assertFalse(ConfigKeyPresence.containsTopLevelKey(
+                "nested:\n  ? max-discord-content-characters\n  : null\nobjective-name: deaths\n", KEY));
+    }
+
+    @Test
     void detectsFlowStyleRootMappingKey() {
         assertTrue(ConfigKeyPresence.containsTopLevelKey(
                 "{webhook-url: \"example\", max-discord-content-characters: null}\n", KEY));
@@ -43,6 +61,12 @@ class ConfigKeyPresenceTest {
     void detectsQuotedFlowStyleRootMappingKey() {
         assertTrue(ConfigKeyPresence.containsTopLevelKey(
                 "{webhook-url: \"example\", 'max-discord-content-characters': null}\n", KEY));
+    }
+
+    @Test
+    void detectsExplicitFlowStyleRootMappingKey() {
+        assertTrue(ConfigKeyPresence.containsTopLevelKey(
+                "{? max-discord-content-characters : null, objective-name: deaths}\n", KEY));
     }
 
     @Test
