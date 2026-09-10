@@ -127,6 +127,38 @@ class PluginSettingsTest {
     }
 
     @Test
+    void honorsLoadedContentLimitWhenRawPresenceScanMissesYamlSyntax() {
+        PluginSettings.LoadResult result = PluginSettings.validate(
+                "https://discord.com/api/webhooks/123/token",
+                "deaths",
+                "ALL",
+                10,
+                true,
+                2,
+                500,
+                false);
+
+        assertTrue(result.valid());
+        assertEquals(500, result.settings().maxDiscordContentCharacters());
+    }
+
+    @Test
+    void rejectsLoadedInvalidContentLimitWhenRawPresenceScanMissesYamlSyntax() {
+        PluginSettings.LoadResult result = PluginSettings.validate(
+                "https://discord.com/api/webhooks/123/token",
+                "deaths",
+                "ALL",
+                10,
+                true,
+                2,
+                "not-a-number",
+                false);
+
+        assertFalse(result.valid());
+        assertTrue(result.errors().stream().anyMatch(error -> error.contains("max-discord")));
+    }
+
+    @Test
     void rejectsExplicitNullContentLimit() {
         PluginSettings.LoadResult result = PluginSettings.validate(
                 "https://discord.com/api/webhooks/123/token",
