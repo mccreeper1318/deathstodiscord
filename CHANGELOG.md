@@ -2,7 +2,13 @@
 
 All notable changes to DeathsToDiscord are documented here.
 
-## [1.4.2]
+## 1.4.3
+
+### Changed
+
+- Bumped actions/setup-java from 5 to 6
+
+## 1.4.2
 
 ### Changed
 
@@ -26,7 +32,7 @@ All notable changes to DeathsToDiscord are documented here.
 - Update `actions/upload-artifact` to `7`
 - Update `io.papermc.paper:paper-api` to `26.2.build.121-stable`
 
-## [1.4.1]
+## 1.4.1
 
 ### Fixed
 
