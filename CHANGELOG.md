@@ -7,7 +7,8 @@ All notable changes to DeathsToDiscord are documented here.
 ### Changed
 
 - Bumped actions/setup-java from 5 to 6
-- Updated the Paper API compile and test runtime target to `26.3.build.49-alpha` for Paper 26.3 compatibility validation while retaining `api-version: '26.2'` and Java 25.
+- Updated the Paper API compile and test runtime target to `26.3.build.134-beta` for Paper 26.3 compatibility validation while retaining `api-version: '26.2'` and Java 25.
+- Validated the plugin's scheduler, player discovery, scoreboard, event, Adventure, plugin metadata, world-path, and SnakeYAML API usage against Paper 26.3 beta; no Java source migration or `api-version` bump was required.
 
 ## 1.4.2
 
