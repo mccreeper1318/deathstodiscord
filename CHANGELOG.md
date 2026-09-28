@@ -7,6 +7,7 @@ All notable changes to DeathsToDiscord are documented here.
 ### Changed
 
 - Bumped actions/setup-java from 5 to 6
+- Updated the Paper API compile and test runtime target to `26.3.build.49-alpha` for Paper 26.3 compatibility validation while retaining `api-version: '26.2'` and Java 25.
 
 ## 1.4.2
 
