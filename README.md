@@ -20,7 +20,7 @@ Instead of posting a new Discord message every time someone dies, the plugin cre
 
 ## Requirements
 
-- Paper **26.2**
+- Paper **26.2 or newer** (1.5.0 is compiled and API-validated against Paper 26.3 beta)
 - Java **25**
 - A Discord server where you can create a webhook
 - A Minecraft scoreboard objective that tracks player deaths
