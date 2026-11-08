@@ -2,6 +2,14 @@
 
 All notable changes to DeathsToDiscord are documented here.
 
+## 1.5.1
+
+### Changed
+
+- Updated the Gradle wrapper from `9.8.0` to `9.8.2`.
+- Updated Gson from `2.14.0` to `2.15.0`.
+- Updated the Paper API from `26.3.build.178-stable` to `26.3.build.244-stable`.
+
 ## 1.5.0
 
 ### Changed
